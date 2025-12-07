@@ -15,35 +15,53 @@ const YouTubeConnect: React.FC<YouTubeConnectProps> = ({ channelId, onConnected 
     const [error, setError] = useState<string | null>(null);
     const { showToast } = useToast();
 
-    // Check for OAuth callback on mount
+    // Check for OAuth callback on mount (supports both implicit and auth code flow)
     useEffect(() => {
         const handleCallback = async () => {
-            const hash = window.location.hash;
-            if (hash && hash.includes('access_token')) {
-                setIsConnecting(true);
-                try {
-                    const result = youtubeService.handleCallback(hash);
-                    if (result) {
-                        // Set the token for the channel from the state param
-                        const targetChannelId = result.channelId || channelId;
+            // Check both query string (code flow) and hash (implicit flow)
+            const urlParams = window.location.search || window.location.hash;
 
-                        // Get channel info
-                        const channel = await youtubeService.getMyChannel(targetChannelId);
-                        if (channel) {
-                            setConnectedChannel(channel);
-                            onConnected?.(channel);
-                            showToast('YouTube channel connected!', 'success');
-                        }
+            if (!urlParams || (!urlParams.includes('access_token') && !urlParams.includes('code'))) {
+                setIsLoading(false);
+                return;
+            }
+
+            setIsConnecting(true);
+            try {
+                const result = youtubeService.handleCallback(urlParams);
+
+                if (result?.code && result.channelId) {
+                    // Authorization code flow - exchange via Edge Function
+                    const exchangeResult = await youtubeService.exchangeCodeForTokens(
+                        result.code,
+                        result.channelId
+                    );
+
+                    if (exchangeResult.success && exchangeResult.youtubeChannel) {
+                        setConnectedChannel(exchangeResult.youtubeChannel);
+                        onConnected?.(exchangeResult.youtubeChannel);
+                        showToast('YouTube connected with persistent tokens!', 'success');
+                    } else {
+                        throw new Error(exchangeResult.error || 'Token exchange failed');
                     }
-                } catch (e: unknown) {
-                    const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-                    setError(errorMessage);
-                    showToast('Failed to connect YouTube', 'error');
-                } finally {
-                    // Clear the hash from URL
-                    window.history.replaceState(null, '', window.location.pathname);
-                    setIsConnecting(false);
+                } else if (result?.accessToken) {
+                    // Implicit flow fallback
+                    const targetChannelId = result.channelId || channelId;
+                    const channel = await youtubeService.getMyChannel(targetChannelId);
+                    if (channel) {
+                        setConnectedChannel(channel);
+                        onConnected?.(channel);
+                        showToast('YouTube channel connected!', 'success');
+                    }
                 }
+            } catch (e: unknown) {
+                const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+                setError(errorMessage);
+                showToast('Failed to connect YouTube', 'error');
+            } finally {
+                // Clear URL params
+                window.history.replaceState(null, '', window.location.pathname);
+                setIsConnecting(false);
             }
             setIsLoading(false);
         };

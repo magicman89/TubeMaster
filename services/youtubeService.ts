@@ -15,6 +15,12 @@ const YOUTUBE_SCOPES = [
 const REDIRECT_URI = `${window.location.origin}/auth/youtube/callback`;
 const STORAGE_KEY = 'tubemaster_youtube_tokens';
 
+// Supabase Edge Function URLs
+const getEdgeFunctionUrl = (name: string) => {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    return supabaseUrl ? `${supabaseUrl}/functions/v1/${name}` : null;
+};
+
 // Supabase client for token persistence
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -135,44 +141,65 @@ export const youtubeService = {
     },
 
     // Generate OAuth2 URL for user to authorize
-    getAuthUrl(channelId: string): string {
+    // Set useCodeFlow=true for authorization code flow (gives refresh tokens)
+    getAuthUrl(channelId: string, useCodeFlow: boolean = true): string {
         // Store channelId in state parameter so we know which channel to associate on callback
-        const state = btoa(JSON.stringify({ channelId }));
+        const state = btoa(JSON.stringify({ channelId, useCodeFlow }));
 
         const params = new URLSearchParams({
             client_id: YOUTUBE_CLIENT_ID,
             redirect_uri: REDIRECT_URI,
-            response_type: 'token',
+            // 'code' for auth code flow (gives refresh token), 'token' for implicit
+            response_type: useCodeFlow ? 'code' : 'token',
             scope: YOUTUBE_SCOPES,
             include_granted_scopes: 'true',
             access_type: 'offline',
+            prompt: 'consent', // Force consent to get refresh token
             state,
         });
 
         return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
     },
 
-    // Handle OAuth callback - extract token from URL hash
-    handleCallback(hash: string): { accessToken: string; expiresIn: number; channelId?: string } | null {
-        const params = new URLSearchParams(hash.replace('#', ''));
-        const token = params.get('access_token');
-        const expiresIn = params.get('expires_in');
-        const stateParam = params.get('state');
+    // Handle OAuth callback - supports both implicit and authorization code flow
+    handleCallback(urlParams: string): {
+        accessToken?: string;
+        expiresIn?: number;
+        code?: string;
+        channelId?: string;
+        useCodeFlow?: boolean;
+    } | null {
+        // Parse state from either query string or hash
+        const searchParams = new URLSearchParams(urlParams.replace('?', '').replace('#', ''));
+        const stateParam = searchParams.get('state');
+        const code = searchParams.get('code');
 
         let channelId: string | undefined;
+        let useCodeFlow = false;
+
         if (stateParam) {
             try {
                 const state = JSON.parse(atob(stateParam));
                 channelId = state.channelId;
+                useCodeFlow = state.useCodeFlow || false;
             } catch {
                 // Ignore state parse errors
             }
         }
 
+        // Authorization code flow - return code for Edge Function exchange
+        if (code) {
+            return { code, channelId, useCodeFlow: true };
+        }
+
+        // Implicit flow - extract token from hash
+        const hashParams = new URLSearchParams(urlParams.replace('#', ''));
+        const token = hashParams.get('access_token');
+        const expiresIn = hashParams.get('expires_in');
+
         if (token && expiresIn) {
             const expiresAt = new Date(Date.now() + parseInt(expiresIn) * 1000);
 
-            // If we have a channelId, store the token for that channel
             if (channelId) {
                 this.setToken(channelId, token, expiresAt);
             }
@@ -180,10 +207,85 @@ export const youtubeService = {
             return {
                 accessToken: token,
                 expiresIn: parseInt(expiresIn),
-                channelId
+                channelId,
+                useCodeFlow: false
             };
         }
         return null;
+    },
+
+    // Exchange authorization code for tokens via Edge Function
+    async exchangeCodeForTokens(code: string, channelId: string): Promise<{
+        success: boolean;
+        youtubeChannel?: YouTubeChannel;
+        error?: string;
+    }> {
+        const edgeFunctionUrl = getEdgeFunctionUrl('youtube-oauth');
+        if (!edgeFunctionUrl) {
+            return { success: false, error: 'Supabase not configured' };
+        }
+
+        try {
+            const response = await fetch(edgeFunctionUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code,
+                    channelId,
+                    redirectUri: REDIRECT_URI,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                return { success: false, error: result.error || 'Token exchange failed' };
+            }
+
+            // Cache locally with server-managed flag
+            if (result.expiresAt) {
+                tokenCache.set(channelId, {
+                    accessToken: 'server-managed',
+                    expiresAt: result.expiresAt,
+                    youtubeChannelId: result.youtubeChannel?.id,
+                    youtubeChannelTitle: result.youtubeChannel?.title,
+                });
+                saveTokensToStorage();
+            }
+
+            return { success: true, youtubeChannel: result.youtubeChannel };
+        } catch (error) {
+            return { success: false, error: String(error) };
+        }
+    },
+
+    // Refresh token via Edge Function (call before operations if token might be expired)
+    async refreshToken(channelId: string): Promise<boolean> {
+        const edgeFunctionUrl = getEdgeFunctionUrl('refresh-token');
+        if (!edgeFunctionUrl) return false;
+
+        try {
+            const response = await fetch(edgeFunctionUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channelId }),
+            });
+
+            if (!response.ok) return false;
+
+            const result = await response.json();
+            if (result.expiresAt) {
+                const existing = tokenCache.get(channelId);
+                if (existing) {
+                    existing.expiresAt = result.expiresAt;
+                    tokenCache.set(channelId, existing);
+                    saveTokensToStorage();
+                }
+            }
+            return true;
+        } catch {
+            return false;
+        }
     },
 
     // Set token for a specific channel
