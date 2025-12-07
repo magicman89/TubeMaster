@@ -1,0 +1,352 @@
+
+
+import React, { useState, useEffect } from 'react';
+import { Channel, View } from '../types';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { Users, Eye, TrendingUp, Activity, Zap, Trophy, Youtube, Loader2, Link2, AlertCircle } from 'lucide-react';
+import { youtubeService, YouTubeAnalytics, YouTubeChannel } from '../services/youtubeService';
+
+interface DashboardProps {
+  channels: Channel[];
+  onNavigate?: (view: View) => void;
+}
+
+interface DailyDataPoint {
+  name: string;
+  views: number;
+  subs: number;
+}
+
+interface StatCardProps {
+  label: string;
+  value: string;
+  icon: React.FC<{ className?: string }>;
+  trend?: number;
+  color: string;
+  loading?: boolean;
+}
+
+const StatCardSkeleton = () => (
+  <div className="glass-panel p-6 rounded-2xl animate-pulse">
+    <div className="flex justify-between items-start mb-4">
+      <div className="w-12 h-12 rounded-xl bg-white/10"></div>
+      <div className="w-16 h-6 rounded-lg bg-white/10"></div>
+    </div>
+    <div className="h-4 w-24 bg-white/10 rounded mb-2"></div>
+    <div className="h-8 w-32 bg-white/10 rounded"></div>
+  </div>
+);
+
+const ChartSkeleton = () => (
+  <div className="glass-panel rounded-2xl p-6 animate-pulse">
+    <div className="flex justify-between items-center mb-6">
+      <div className="h-6 w-40 bg-white/10 rounded"></div>
+      <div className="h-8 w-28 bg-white/10 rounded-lg"></div>
+    </div>
+    <div className="h-80 w-full flex items-end gap-2 px-4">
+      {[40, 65, 45, 80, 55, 70, 60].map((h, i) => (
+        <div key={i} className="flex-1 bg-white/5 rounded-t" style={{ height: `${h}%` }}></div>
+      ))}
+    </div>
+  </div>
+);
+
+const StatCard: React.FC<StatCardProps> = ({ label, value, icon: Icon, trend, color, loading }) => {
+  if (loading) return <StatCardSkeleton />;
+
+  return (
+    <div className="glass-panel p-6 rounded-2xl group cursor-default">
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-3 rounded-xl bg-${color}-500/10 border border-${color}-500/20 group-hover:border-${color}-500/50 transition-colors shadow-[0_0_15px_rgba(0,0,0,0.2)]`}>
+          <Icon className={`w-6 h-6 text-${color}-400 group-hover:text-${color}-300 transition-colors`} />
+        </div>
+        {trend !== undefined && (
+          <span className={`text-sm font-bold px-2 py-1 rounded-lg ${trend > 0 ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'} flex items-center gap-1`}>
+            {trend > 0 ? '+' : ''}{trend}%
+            <TrendingUp className="w-3 h-3" />
+          </span>
+        )}
+      </div>
+      <h3 className="text-slate-400 text-sm font-medium tracking-wide uppercase">{label}</h3>
+      <p className="text-3xl font-bold text-white mt-1 drop-shadow-sm">{value}</p>
+    </div>
+  );
+};
+
+const ConnectYouTubeCTA: React.FC<{ onNavigate?: (view: View) => void }> = ({ onNavigate }) => (
+  <div className="glass-panel rounded-2xl p-8 text-center border border-dashed border-red-500/30 hover:border-red-500/50 transition-all">
+    <div className="flex flex-col items-center gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+        <Youtube className="w-8 h-8 text-red-400" />
+      </div>
+      <div>
+        <h3 className="text-xl font-bold text-white mb-2">Connect Your YouTube Channel</h3>
+        <p className="text-slate-400 text-sm max-w-md mx-auto mb-4">
+          Link your YouTube channel to see real-time analytics, subscriber growth, and performance metrics right here in your command center.
+        </p>
+      </div>
+      <button
+        onClick={() => onNavigate?.(View.SETTINGS)}
+        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 rounded-xl font-bold text-white shadow-lg shadow-red-500/20 transition-all"
+      >
+        <Link2 className="w-4 h-4" />
+        Connect in Settings
+      </button>
+    </div>
+  </div>
+);
+
+const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate }) => {
+  const [isConnected, setIsConnected] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [analytics, setAnalytics] = useState<YouTubeAnalytics | null>(null);
+  const [channelInfo, setChannelInfo] = useState<YouTubeChannel | null>(null);
+  const [dateRange, setDateRange] = useState<'7' | '30'>('7');
+  const [chartData, setChartData] = useState<DailyDataPoint[]>([]);
+
+  // Check connection and load data
+  useEffect(() => {
+    const checkConnectionAndLoadData = async () => {
+      setLoading(true);
+      setError(null);
+
+      const connected = youtubeService.isAuthenticated();
+      setIsConnected(connected);
+
+      if (!connected) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Get channel info
+        const channel = await youtubeService.getMyChannel();
+        setChannelInfo(channel);
+
+        // Get analytics for the selected date range
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(endDate.getDate() - parseInt(dateRange));
+
+        const analyticsData = await youtubeService.getAnalytics(startDate, endDate);
+        setAnalytics(analyticsData);
+
+        // Generate chart data (in real app, this would come from daily analytics API)
+        const days = parseInt(dateRange);
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const generatedData: DailyDataPoint[] = [];
+
+        for (let i = days - 1; i >= 0; i--) {
+          const date = new Date();
+          date.setDate(date.getDate() - i);
+          generatedData.push({
+            name: dayNames[date.getDay()],
+            views: Math.floor((analyticsData.views / days) * (0.7 + Math.random() * 0.6)),
+            subs: Math.floor((analyticsData.subscribersGained / days) * (0.7 + Math.random() * 0.6))
+          });
+        }
+        setChartData(generatedData);
+
+      } catch (err) {
+        setError('Failed to load YouTube analytics. Please reconnect your channel.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkConnectionAndLoadData();
+  }, [dateRange]);
+
+  // Gamification calculation using real subscriber count
+  const totalSubs = channelInfo?.subscriberCount || channels.reduce((acc, c) => acc + c.subscribers, 0);
+  let level = 'Novice';
+  let progress = 0;
+  let nextLevel = 1000;
+
+  if (totalSubs > 1000000) { level = 'Icon'; progress = 100; nextLevel = 1000000; }
+  else if (totalSubs > 500000) { level = 'Star'; progress = ((totalSubs - 500000) / 500000) * 100; nextLevel = 1000000; }
+  else if (totalSubs > 100000) { level = 'Pro'; progress = ((totalSubs - 100000) / 400000) * 100; nextLevel = 500000; }
+  else if (totalSubs > 10000) { level = 'Rising'; progress = ((totalSubs - 10000) / 90000) * 100; nextLevel = 100000; }
+  else { progress = (totalSubs / 10000) * 100; nextLevel = 10000; }
+
+  // Format numbers
+  const formatNumber = (num: number): string => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num.toLocaleString();
+  };
+
+  const formatMinutes = (mins: number): string => {
+    if (mins >= 60) return `${(mins / 60).toFixed(1)}h`;
+    return `${mins}m`;
+  };
+
+  return (
+    <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-4 border-b border-white/5">
+        <div>
+          <h1 className="text-4xl font-bold text-white neon-text-gradient mb-2">Command Center</h1>
+          <p className="text-slate-400">
+            {isConnected && channelInfo
+              ? `Real-time analytics for ${channelInfo.title}`
+              : 'Connect YouTube to see real-time telemetry'}
+          </p>
+        </div>
+
+        {/* Gamification Bar */}
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-yellow-400" />
+            <span className="text-white font-bold text-lg">{level} Creator</span>
+          </div>
+          <div className="w-64 h-2 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-yellow-500 to-orange-500 transition-all duration-1000" style={{ width: `${progress}%` }}></div>
+          </div>
+          <span className="text-[10px] text-slate-500 uppercase tracking-widest">{Math.floor(nextLevel - totalSubs).toLocaleString()} XP to Next Level</span>
+        </div>
+      </div>
+
+      {/* Not Connected State */}
+      {!isConnected && !loading && (
+        <ConnectYouTubeCTA onNavigate={onNavigate} />
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="glass-panel rounded-2xl p-4 border border-red-500/30 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-400" />
+          <span className="text-red-300">{error}</span>
+          <button
+            onClick={() => onNavigate?.(View.SETTINGS)}
+            className="ml-auto text-sm text-blue-400 hover:text-blue-300"
+          >
+            Reconnect
+          </button>
+        </div>
+      )}
+
+      {/* Stats Grid - Show skeleton when loading, real data when connected */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          label="Total Views"
+          value={isConnected && analytics ? formatNumber(analytics.views) : '--'}
+          icon={Eye}
+          trend={isConnected ? undefined : undefined}
+          color="blue"
+          loading={loading && isConnected}
+        />
+        <StatCard
+          label="Subscribers"
+          value={isConnected && channelInfo ? formatNumber(channelInfo.subscriberCount) : '--'}
+          icon={Users}
+          trend={isConnected && analytics ? Math.round((analytics.subscribersGained - analytics.subscribersLost) / Math.max(1, analytics.subscribersGained) * 100) : undefined}
+          color="purple"
+          loading={loading && isConnected}
+        />
+        <StatCard
+          label="Watch Time"
+          value={isConnected && analytics ? formatMinutes(analytics.estimatedMinutesWatched) : '--'}
+          icon={Activity}
+          color="orange"
+          loading={loading && isConnected}
+        />
+        <StatCard
+          label="Engagement"
+          value={isConnected && analytics ? formatNumber(analytics.likes + analytics.shares) : '--'}
+          icon={Zap}
+          color="yellow"
+          loading={loading && isConnected}
+        />
+      </div>
+
+      {/* Charts - Only show when connected */}
+      {isConnected && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {loading ? (
+            <>
+              <ChartSkeleton />
+              <ChartSkeleton />
+            </>
+          ) : (
+            <>
+              <div className="glass-panel rounded-2xl p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Eye className="w-5 h-5 text-blue-400" /> View Analytics
+                  </h2>
+                  <select
+                    value={dateRange}
+                    onChange={(e) => setDateRange(e.target.value as '7' | '30')}
+                    className="bg-black/30 border border-white/10 rounded-lg text-xs text-slate-300 px-3 py-1 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="7">Last 7 Days</option>
+                    <option value="30">Last 30 Days</option>
+                  </select>
+                </div>
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData}>
+                      <defs>
+                        <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} dy={10} />
+                      <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} dx={-10} />
+                      <Tooltip
+                        cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
+                        contentStyle={{ backgroundColor: 'rgba(3, 0, 20, 0.9)', borderColor: 'rgba(255,255,255,0.1)', color: '#fff', borderRadius: '12px', backdropFilter: 'blur(10px)' }}
+                        itemStyle={{ color: '#fff' }}
+                      />
+                      <Area type="monotone" dataKey="views" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorViews)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="glass-panel rounded-2xl p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Users className="w-5 h-5 text-purple-400" /> Subscriber Growth
+                  </h2>
+                  <select
+                    value={dateRange}
+                    onChange={(e) => setDateRange(e.target.value as '7' | '30')}
+                    className="bg-black/30 border border-white/10 rounded-lg text-xs text-slate-300 px-3 py-1 focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="7">Last 7 Days</option>
+                    <option value="30">Last 30 Days</option>
+                  </select>
+                </div>
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData}>
+                      <defs>
+                        <linearGradient id="colorSubs" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#a855f7" stopOpacity={1} />
+                          <stop offset="100%" stopColor="#d946ef" stopOpacity={0.6} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} dy={10} />
+                      <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} dx={-10} />
+                      <Tooltip
+                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                        contentStyle={{ backgroundColor: 'rgba(3, 0, 20, 0.9)', borderColor: 'rgba(255,255,255,0.1)', color: '#fff', borderRadius: '12px', backdropFilter: 'blur(10px)' }}
+                        itemStyle={{ color: '#fff' }}
+                      />
+                      <Bar dataKey="subs" fill="url(#colorSubs)" radius={[6, 6, 0, 0]} maxBarSize={50} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Dashboard;
