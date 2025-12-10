@@ -119,25 +119,28 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
 
     const updateBranding = (field: string, value: string) => {
         if (!channelForm) return;
+        const baseBranding = channelForm.branding || { primaryColor: '', secondaryColor: '' };
         setChannelForm({
             ...channelForm,
-            branding: { ...channelForm.branding!, [field]: value }
+            branding: { ...baseBranding, [field]: value }
         });
     };
 
     const updateGoals = (field: string, value: string | number) => {
         if (!channelForm) return;
+        const baseGoals = channelForm.goals || { subscriberTarget: 0, uploadFrequency: 'weekly' };
         setChannelForm({
             ...channelForm,
-            goals: { ...channelForm.goals!, [field]: value }
+            goals: { ...baseGoals, [field]: value }
         });
     };
 
     const updateAudience = (field: string, value: string | string[]) => {
         if (!channelForm) return;
+        const baseAudience = channelForm.audience || { ageGroup: '', genderSplit: '', topLocations: [] };
         setChannelForm({
             ...channelForm,
-            audience: { ...channelForm.audience!, [field]: value }
+            audience: { ...baseAudience, [field]: value }
         });
     };
 
@@ -440,7 +443,7 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                     <label className="text-xs font-bold text-slate-500 uppercase">Niche / Category</label>
                                     <select
                                         value={channelForm.niche}
-                                        onChange={(e) => updateChannelField('niche', e.target.value)}
+                                        onChange={(e) => updateChannelField('niche', e.target.value as ChannelNiche)}
                                         className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-purple-500 focus:outline-none"
                                     >
                                         {Object.values(ChannelNiche).map(n => <option key={n} value={n}>{n}</option>)}
