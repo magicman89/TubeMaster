@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Save, RefreshCw, Smartphone, Monitor, Mic2, User, Database, Radio, Youtube, Key, Palette, Target, Users, Hash, Layout, Plus, X, Image as ImageIcon, Upload, Sparkles, Link2 } from 'lucide-react';
-import { Channel, ChannelNiche } from '../types';
+import { Settings, Save, RefreshCw, Smartphone, Monitor, Mic2, User, Database, Radio, Youtube, Key, Palette, Target, Users, Hash, Layout, Plus, X, Image as ImageIcon, Upload, Sparkles, Link2, BrainCircuit } from 'lucide-react';
+import { Channel, ChannelNiche, AutopilotConfigRow } from '../types';
 import { useToast } from './ToastContext';
 import YouTubeConnect from './YouTubeConnect';
+import { supabase } from '../services/supabase';
 
 interface SettingsProps {
     activeChannel?: Channel;
@@ -25,21 +26,70 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
     // Channel State (Form)
     const [channelForm, setChannelForm] = useState<Channel | null>(null);
     const [newStyleTag, setNewStyleTag] = useState('');
+    const [autopilotConfig, setAutopilotConfig] = useState<AutopilotConfigRow | null>(null);
 
     const [isSaved, setIsSaved] = useState(false);
 
     useEffect(() => {
         if (activeChannel) {
             setChannelForm(JSON.parse(JSON.stringify(activeChannel))); // Deep copy
+            fetchAutopilotConfig(activeChannel.id);
         }
     }, [activeChannel]);
 
-    const handleSave = () => {
-        setIsSaved(true);
-        if (activeTab === 'CHANNEL' && channelForm && onUpdateChannel) {
-            onUpdateChannel(channelForm);
+    const fetchAutopilotConfig = async (channelId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('autopilot_configs')
+                .select('*')
+                .eq('channel_id', channelId)
+                .single();
+
+            if (data) {
+                setAutopilotConfig(data as AutopilotConfigRow);
+            } else if (error && error.code === 'PGRST116') {
+                 // Not found, create default state for UI but don't save yet
+                 setAutopilotConfig({
+                    channel_id: channelId,
+                    enabled: false,
+                    frequency: 'weekly',
+                    source: 'trending',
+                    auto_schedule: true,
+                    platforms: ['YOUTUBE']
+                 });
+            }
+        } catch (e) {
+            console.error("Failed to fetch autopilot config", e);
         }
-        showToast('Configuration Saved Successfully', 'success');
+    };
+
+    const handleSave = async () => {
+        setIsSaved(true);
+
+        try {
+            // Save Channel
+            if (activeTab === 'CHANNEL' && channelForm && onUpdateChannel) {
+                onUpdateChannel(channelForm);
+
+                // Save Autopilot Config
+                if (autopilotConfig) {
+                    const { error } = await supabase
+                        .from('autopilot_configs')
+                        .upsert({
+                            ...autopilotConfig,
+                            channel_id: channelForm.id,
+                            updated_at: new Date().toISOString()
+                        }, { onConflict: 'channel_id' });
+
+                    if (error) throw error;
+                }
+            }
+            showToast('Configuration Saved Successfully', 'success');
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to save settings', 'error');
+        }
+
         setTimeout(() => setIsSaved(false), 2000);
     };
 
@@ -280,6 +330,69 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                 onConnected={(ch) => showToast(`${channelForm.name} connected to ${ch.title}!`, 'success')}
                             />
                         </section>
+
+                        {/* Autopilot V2 Config */}
+                        {autopilotConfig && (
+                            <section className={`glass-panel p-6 rounded-2xl border transition-colors ${autopilotConfig.enabled ? 'border-purple-500/50 bg-purple-500/5' : 'border-slate-700/30'}`}>
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-lg ${autopilotConfig.enabled ? 'bg-purple-500/20' : 'bg-slate-700/30'}`}>
+                                            <BrainCircuit className={`w-5 h-5 ${autopilotConfig.enabled ? 'text-purple-400' : 'text-slate-500'}`} />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-lg font-bold text-white">Autopilot V2</h2>
+                                            <p className="text-xs text-slate-400">Autonomous Daily Pipeline</p>
+                                        </div>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={autopilotConfig.enabled}
+                                            onChange={(e) => setAutopilotConfig({...autopilotConfig, enabled: e.target.checked})}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                    </label>
+                                </div>
+
+                                {autopilotConfig.enabled && (
+                                    <div className="space-y-4 animate-fade-in">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-slate-500 uppercase">Frequency</label>
+                                                <select
+                                                    value={autopilotConfig.frequency}
+                                                    onChange={(e) => setAutopilotConfig({...autopilotConfig, frequency: e.target.value})}
+                                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:border-purple-500 outline-none"
+                                                >
+                                                    <option value="daily">Daily (~24h)</option>
+                                                    <option value="weekly">Weekly</option>
+                                                    <option value="bi-weekly">Bi-Weekly</option>
+                                                    <option value="always_on">Always On (Debug)</option>
+                                                </select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-slate-500 uppercase">Source Mode</label>
+                                                <select
+                                                    value={autopilotConfig.source}
+                                                    onChange={(e) => setAutopilotConfig({...autopilotConfig, source: e.target.value})}
+                                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:border-purple-500 outline-none"
+                                                >
+                                                    <option value="trending">Viral Trends</option>
+                                                    <option value="evergreen">Evergreen Topics</option>
+                                                    <option value="news">Niche News</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                                            <p className="text-[10px] text-purple-300 leading-relaxed">
+                                                <span className="font-bold">Status:</span> The system will check this channel {autopilotConfig.frequency}. If triggered, it will generate a new concept, script it, visualize it, and prepare it for review.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </section>
+                        )}
 
                         <section className="glass-panel p-8 rounded-2xl relative overflow-hidden group">
                             <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-transparent via-purple-500 to-transparent opacity-50"></div>

@@ -7,10 +7,10 @@ CREATE EXTENSION IF NOT EXISTS pg_cron;
 -- Grant usage to postgres user
 GRANT USAGE ON SCHEMA cron TO postgres;
 
--- Schedule autopilot to run daily at 9:00 AM UTC
--- This calls the autopilot-run Edge Function
+-- 1. Schedule Autopilot Initiator (Run Daily)
+-- Starts new projects for channels based on frequency settings
 SELECT cron.schedule(
-    'autopilot-daily',           -- job name
+    'autopilot-initiator',           -- job name
     '0 9 * * *',                 -- cron expression: 9 AM every day
     $$
     SELECT
@@ -25,16 +25,16 @@ SELECT cron.schedule(
     $$
 );
 
--- Alternative: Run every 6 hours for more frequent content generation
--- Uncomment this and comment out the daily schedule if desired
-/*
+-- 2. Schedule Autopilot Worker (Run Frequently)
+-- Processes the pipeline stages (Scripting -> Audio -> Visuals -> Review)
+-- Runs every 5 minutes to ensure steady progress
 SELECT cron.schedule(
-    'autopilot-frequent',
-    '0 */6 * * *',               -- Every 6 hours
+    'autopilot-worker',
+    '*/5 * * * *',               -- Every 5 minutes
     $$
     SELECT
         net.http_post(
-            url := current_setting('app.settings.supabase_url') || '/functions/v1/autopilot-run',
+            url := current_setting('app.settings.supabase_url') || '/functions/v1/autopilot-worker',
             headers := jsonb_build_object(
                 'Content-Type', 'application/json',
                 'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
@@ -43,13 +43,13 @@ SELECT cron.schedule(
         ) AS request_id;
     $$
 );
-*/
 
 -- View scheduled jobs
 -- SELECT * FROM cron.job;
 
 -- Remove a scheduled job (if needed)
--- SELECT cron.unschedule('autopilot-daily');
+-- SELECT cron.unschedule('autopilot-initiator');
+-- SELECT cron.unschedule('autopilot-worker');
 
 -- View job run history
 -- SELECT * FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;

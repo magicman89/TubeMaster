@@ -1,5 +1,6 @@
-// Supabase Edge Function: Autopilot Runner
-// Scheduled function that generates and uploads content for channels with autopilot enabled
+// Supabase Edge Function: Autopilot Runner (Scheduler/Initiator)
+// Scheduled function that INITIATES video projects for channels with autopilot enabled.
+// It creates the project entry and hands it off to the 'autopilot-worker' via the database state.
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.0';
@@ -14,39 +15,6 @@ interface Channel {
     id: string;
     name: string;
     niche: string;
-    youtube_access_token: string;
-    youtube_refresh_token: string;
-    youtube_token_expires_at: string;
-    youtube_channel_id: string;
-    branding: {
-        primaryColor?: string;
-        slogan?: string;
-    };
-    goals: {
-        uploadFrequency?: string;
-    };
-    style_memory: string[];
-}
-
-interface AutopilotConfig {
-    id: string;
-    channel_id: string;
-    enabled: boolean;
-    source: string;
-    frequency: string;
-    content_mix: {
-        trending: number;
-        evergreen: number;
-        series: number;
-    };
-}
-
-interface GeneratedContent {
-    title: string;
-    description: string;
-    script: string;
-    tags: string[];
-    thumbnailPrompt: string;
 }
 
 serve(async (req) => {
@@ -61,140 +29,90 @@ serve(async (req) => {
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     if (!geminiApiKey) {
-        return new Response(
-            JSON.stringify({ error: 'GEMINI_API_KEY not configured' }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: 'GEMINI_API_KEY not configured' }), { status: 500 });
     }
-
     const genAI = new GoogleGenerativeAI(geminiApiKey);
 
     try {
-        // Get all channels with autopilot enabled
+        // 1. Get all channels with autopilot enabled
         const { data: configs, error: configError } = await supabase
             .from('autopilot_configs')
-            .select('*, channels(*)')
+            .select('*, channels(id, name, niche)')
             .eq('enabled', true);
 
-        if (configError) {
-            console.error('Failed to fetch autopilot configs:', configError);
-            return new Response(
-                JSON.stringify({ error: 'Failed to fetch autopilot configs' }),
-                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
+        if (configError) throw configError;
 
-        const results: { channelId: string; status: string; projectId?: string; error?: string }[] = [];
+        const results = [];
 
         for (const config of configs || []) {
             const channel = config.channels as Channel;
 
-            if (!channel?.youtube_access_token) {
-                results.push({
-                    channelId: channel?.id || config.channel_id,
-                    status: 'skipped',
-                    error: 'No YouTube connection'
-                });
+            // Check if we should run today (Simple daily check for now, can be expanded)
+            // Ideally we check the last project created_at for this channel
+            const { data: lastProject } = await supabase
+                .from('video_projects')
+                .select('created_at')
+                .eq('channel_id', channel.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            const lastRun = lastProject ? new Date(lastProject.created_at) : new Date(0);
+            const hoursSinceLastRun = (Date.now() - lastRun.getTime()) / (1000 * 60 * 60);
+
+            // Frequency Logic
+            let shouldRun = false;
+            let requiredHours = 20; // Default daily
+
+            switch (config.frequency) {
+                case 'always_on':
+                    shouldRun = true;
+                    break;
+                case 'weekly':
+                    requiredHours = 24 * 6; // 6 days buffer
+                    shouldRun = hoursSinceLastRun > requiredHours;
+                    break;
+                case 'bi-weekly':
+                    requiredHours = 24 * 13; // 13 days buffer
+                    shouldRun = hoursSinceLastRun > requiredHours;
+                    break;
+                case 'daily':
+                default:
+                    requiredHours = 20; // 20 hours buffer
+                    shouldRun = hoursSinceLastRun > requiredHours;
+                    break;
+            }
+
+            if (!shouldRun) {
+                results.push({ channelId: channel.id, status: 'skipped', reason: `Frequency limit (${config.frequency}). Hours since last: ${hoursSinceLastRun.toFixed(1)}` });
                 continue;
             }
 
             try {
-                // 1. Refresh token if needed
-                const tokenExpiry = new Date(channel.youtube_token_expires_at);
-                if (tokenExpiry.getTime() - Date.now() < 5 * 60 * 1000) {
-                    const refreshResponse = await fetch(
-                        `${Deno.env.get('SUPABASE_URL')}/functions/v1/refresh-token`,
-                        {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                            },
-                            body: JSON.stringify({ channelId: channel.id }),
-                        }
-                    );
-
-                    if (!refreshResponse.ok) {
-                        results.push({
-                            channelId: channel.id,
-                            status: 'failed',
-                            error: 'Token refresh failed'
-                        });
-                        continue;
-                    }
-
-                    // Re-fetch channel with new token
-                    const { data: updatedChannel } = await supabase
-                        .from('channels')
-                        .select('youtube_access_token')
-                        .eq('id', channel.id)
-                        .single();
-
-                    if (updatedChannel) {
-                        channel.youtube_access_token = updatedChannel.youtube_access_token;
-                    }
-                }
-
-                // 2. Generate content idea with Gemini
+                // 2. Generate a Topic (Lightweight)
                 const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+                const prompt = `Generate ONE single, high-potential viral video topic for a YouTube channel in the "${channel.niche}" niche. Return ONLY the topic string.`;
+                const result = await model.generateContent(prompt);
+                const topic = result.response.text().replace(/"/g, '').trim();
 
-                const contentPrompt = `You are a YouTube content strategist for a ${channel.niche} channel called "${channel.name}".
-${channel.branding?.slogan ? `Their slogan is: "${channel.branding.slogan}"` : ''}
-${channel.style_memory?.length ? `Their style preferences: ${channel.style_memory.join(', ')}` : ''}
-
-Generate a viral video concept. Return JSON with:
-{
-  "title": "catchy title under 60 chars",
-  "description": "engaging description with keywords (2000 chars max)",
-  "script": "full video script with timestamps",
-  "tags": ["relevant", "tags", "array"],
-  "thumbnailPrompt": "detailed prompt for AI thumbnail generation"
-}
-
-Focus on trending topics in ${channel.niche} that would get high engagement.`;
-
-                const result = await model.generateContent(contentPrompt);
-                const responseText = result.response.text();
-
-                // Parse JSON from response
-                const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-                if (!jsonMatch) {
-                    results.push({
-                        channelId: channel.id,
-                        status: 'failed',
-                        error: 'Failed to parse AI response'
-                    });
-                    continue;
-                }
-
-                const content: GeneratedContent = JSON.parse(jsonMatch[0]);
-
-                // 3. Create a video project in the database
+                // 3. Create Project in "Scripting" stage
                 const { data: project, error: projectError } = await supabase
                     .from('video_projects')
                     .insert({
                         channel_id: channel.id,
-                        title: content.title,
-                        description: content.description,
-                        script: content.script,
-                        tags: content.tags,
-                        thumbnail_prompt: content.thumbnailPrompt,
-                        status: 'draft',
+                        title: topic,
+                        description: 'Pending generation...',
+                        status: 'production',
                         pipeline_stage: 'scripting',
+                        scenes_data: [],
+                        social_posts: []
                     })
                     .select()
                     .single();
 
-                if (projectError) {
-                    results.push({
-                        channelId: channel.id,
-                        status: 'failed',
-                        error: 'Failed to create project'
-                    });
-                    continue;
-                }
+                if (projectError) throw projectError;
 
-                // 4. Create a pipeline item for tracking
+                // 4. Create Pipeline Item (for visibility)
                 await supabase
                     .from('pipeline_items')
                     .insert({
@@ -202,43 +120,22 @@ Focus on trending topics in ${channel.niche} that would get high engagement.`;
                         project_id: project.id,
                         stage: 'scripting',
                         automation_level: 'full',
-                        approval_required: config.approval_workflow !== 'full-auto',
-                        metadata: {
-                            generated_at: new Date().toISOString(),
-                            source: config.source,
-                        },
+                        metadata: { source: 'autopilot-v2' }
                     });
 
-                results.push({
-                    channelId: channel.id,
-                    status: 'success',
-                    projectId: project.id
-                });
+                results.push({ channelId: channel.id, status: 'initiated', topic });
 
-            } catch (error) {
-                console.error(`Autopilot error for channel ${channel.id}:`, error);
-                results.push({
-                    channelId: channel.id,
-                    status: 'failed',
-                    error: String(error)
-                });
+            } catch (err) {
+                console.error(`Error for channel ${channel.id}:`, err);
+                results.push({ channelId: channel.id, status: 'failed', error: String(err) });
             }
         }
 
-        return new Response(
-            JSON.stringify({
-                success: true,
-                processed: results.length,
-                results,
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ results }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
 
     } catch (error) {
-        console.error('Autopilot runner error:', error);
-        return new Response(
-            JSON.stringify({ error: 'Internal server error' }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: String(error) }), { status: 500, headers: corsHeaders });
     }
 });
