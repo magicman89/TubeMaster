@@ -43,7 +43,7 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
         setTimeout(() => setIsSaved(false), 2000);
     };
 
-    const updateChannelField = (field: keyof Channel, value: any) => {
+    const updateChannelField = <K extends keyof Channel>(field: K, value: Channel[K]) => {
         if (!channelForm) return;
         setChannelForm({ ...channelForm, [field]: value });
     };
@@ -75,7 +75,7 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
         });
     };
 
-    const updateGoals = (field: string, value: any) => {
+    const updateGoals = (field: string, value: string | number) => {
         if (!channelForm) return;
         setChannelForm({
             ...channelForm,
@@ -83,7 +83,7 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
         });
     };
 
-    const updateAudience = (field: string, value: any) => {
+    const updateAudience = (field: string, value: string | string[]) => {
         if (!channelForm) return;
         setChannelForm({
             ...channelForm,

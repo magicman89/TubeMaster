@@ -56,14 +56,14 @@ const IdeaVault: React.FC<IdeaVaultProps> = ({ onPromoteIdea }) => {
             {/* Input Area */}
             <div className="glass-panel p-2 rounded-2xl mb-8 flex gap-2">
                 <div className="relative flex-1">
-                    <input 
+                    <input
                         value={newIdea}
                         onChange={(e) => setNewIdea(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
                         placeholder="Capture a fleeting thought..."
                         className="w-full bg-transparent border-none focus:ring-0 text-white placeholder-slate-500 py-3 px-4 pr-10 h-12"
                     />
-                    <button 
+                    <button
                         onClick={handleEnhance}
                         disabled={!newIdea.trim() || isEnhancing}
                         className="absolute right-2 top-3 text-slate-500 hover:text-purple-400 disabled:opacity-30 transition-colors"
@@ -72,9 +72,9 @@ const IdeaVault: React.FC<IdeaVaultProps> = ({ onPromoteIdea }) => {
                         {isEnhancing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
                     </button>
                 </div>
-                <select 
+                <select
                     value={selectedType}
-                    onChange={(e) => setSelectedType(e.target.value as any)}
+                    onChange={(e) => setSelectedType(e.target.value as Idea['type'])}
                     className="bg-white/5 border border-white/10 rounded-xl px-3 text-sm text-slate-300 focus:outline-none"
                 >
                     <option value="random">Random</option>
@@ -82,7 +82,7 @@ const IdeaVault: React.FC<IdeaVaultProps> = ({ onPromoteIdea }) => {
                     <option value="title">Title</option>
                     <option value="visual">Visual</option>
                 </select>
-                <button 
+                <button
                     onClick={handleAdd}
                     disabled={!newIdea.trim()}
                     className="bg-purple-600 hover:bg-purple-500 text-white px-6 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -97,12 +97,11 @@ const IdeaVault: React.FC<IdeaVaultProps> = ({ onPromoteIdea }) => {
                     <div key={idea.id} className="glass-panel p-5 rounded-xl group hover:border-purple-500/30 transition-all flex flex-col justify-between min-h-[160px]">
                         <div>
                             <div className="flex justify-between items-start mb-3">
-                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded border ${
-                                    idea.type === 'hook' ? 'bg-red-500/10 text-red-300 border-red-500/20' :
-                                    idea.type === 'visual' ? 'bg-blue-500/10 text-blue-300 border-blue-500/20' :
-                                    idea.type === 'title' ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20' :
-                                    'bg-slate-500/10 text-slate-300 border-slate-500/20'
-                                }`}>
+                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded border ${idea.type === 'hook' ? 'bg-red-500/10 text-red-300 border-red-500/20' :
+                                        idea.type === 'visual' ? 'bg-blue-500/10 text-blue-300 border-blue-500/20' :
+                                            idea.type === 'title' ? 'bg-yellow-500/10 text-yellow-300 border-yellow-500/20' :
+                                                'bg-slate-500/10 text-slate-300 border-slate-500/20'
+                                    }`}>
                                     {idea.type}
                                 </span>
                                 <button onClick={() => handleDelete(idea.id)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -111,9 +110,9 @@ const IdeaVault: React.FC<IdeaVaultProps> = ({ onPromoteIdea }) => {
                             </div>
                             <p className="text-slate-200 font-medium leading-relaxed mb-4">{idea.content}</p>
                         </div>
-                        
+
                         <div className="pt-4 border-t border-white/5 flex justify-end">
-                            <button 
+                            <button
                                 onClick={() => onPromoteIdea(idea)}
                                 className="text-xs font-bold text-purple-400 hover:text-white flex items-center gap-1 transition-colors"
                             >
@@ -122,7 +121,7 @@ const IdeaVault: React.FC<IdeaVaultProps> = ({ onPromoteIdea }) => {
                         </div>
                     </div>
                 ))}
-                
+
                 {ideas.length === 0 && (
                     <div className="col-span-full flex flex-col items-center justify-center p-12 border-2 border-dashed border-white/10 rounded-2xl text-slate-500">
                         <Lightbulb className="w-12 h-12 mb-4 opacity-50" />
