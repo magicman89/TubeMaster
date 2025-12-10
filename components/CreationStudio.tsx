@@ -102,6 +102,22 @@ const formatTimestamp = (seconds: number) => {
     return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
+// Normalize scenes so status/basics stay consistent across loaders and generators
+const normalizeScene = (scene: Partial<Scene>, index: number = 0): Scene => ({
+    timestamp: scene.timestamp || `${formatTimestamp(index * 8)}-${formatTimestamp((index + 1) * 8)}`,
+    visual: scene.visual || '',
+    audio: scene.audio || '',
+    transition: scene.transition ?? 'Cut',
+    videoUrl: scene.videoUrl,
+    generated: scene.generated ?? Boolean(scene.videoUrl),
+    status: scene.status || (scene.videoUrl ? 'success' : 'pending'),
+    error: scene.error,
+    script: scene.script,
+    voiceoverUrl: scene.voiceoverUrl,
+});
+
+const normalizeScenes = (scenes: Partial<Scene>[] = []) => scenes.map((scene, index) => normalizeScene(scene, index));
+
 // --- AUTOPILOT CONFIGURATION MODAL ---
 const AutopilotConfigModal: React.FC<{
     isOpen: boolean;
@@ -337,7 +353,7 @@ const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialP
                     if (project) {
                         setMode('EDITOR');
                         if (project.scenes_data) {
-                            setScenes(project.scenes_data);
+                            setScenes(normalizeScenes(project.scenes_data));
                         }
                         setChatInput(project.title);
                         if (project.social_posts) {
@@ -368,7 +384,7 @@ const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialP
                         // Ideally we check specific fields.
                         // Here we will just update the scenes that have changed from pending -> success
                         setScenes(prev => {
-                            const newScenes = newData.scenes_data;
+                            const newScenes = normalizeScenes(newData.scenes_data);
                             return prev.map((s, i) => {
                                 // If local is pending and remote is success, update
                                 if (s.status !== 'success' && newScenes[i]?.status === 'success') {
@@ -457,14 +473,14 @@ const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialP
                 syncMode
             );
             const plan = JSON.parse(planJson);
-            const limitedScenes = (plan.scenes || []).slice(0, 10).map((s: Scene) => ({ ...s, status: 'pending' as const }));
+            const limitedScenes = normalizeScenes((plan.scenes || []).slice(0, 10));
             setScenes(limitedScenes);
             updateAgent(AgentRole.STRATEGIST, 'done', `Blueprint generated.`);
 
             // --- VFX PHASE ---
             updateAgent(AgentRole.VFX_SPECIALIST, 'working', `Injecting style tags...`);
             // Simulating enhancement pass
-            const enhancedScenes = limitedScenes;
+            const enhancedScenes = normalizeScenes(limitedScenes);
             setScenes(enhancedScenes);
             updateAgent(AgentRole.VFX_SPECIALIST, 'done', 'Visuals optimized.');
 
@@ -527,20 +543,22 @@ const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialP
                 const batchPromises = batchIndices.map(async (i) => {
                     const scene = enhancedScenes[i];
                     try {
+                        generatedScenes[i] = { ...generatedScenes[i], status: 'generating', error: undefined };
                         const videoUrl = await generateVeoVideo(scene.visual || '', aspectRatio, resolution);
                         if (videoUrl) {
-                            generatedScenes[i] = { ...generatedScenes[i], videoUrl, generated: true, status: 'success' };
+                            generatedScenes[i] = { ...generatedScenes[i], videoUrl, generated: true, status: 'success', error: undefined };
                             addSystemLog(`✓ Scene ${i + 1} rendered.`);
                             return true;
                         } else {
                             addSystemLog(`✗ Scene ${i + 1} failed.`);
-                            generatedScenes[i] = { ...generatedScenes[i], status: 'error' };
+                            generatedScenes[i] = { ...generatedScenes[i], status: 'error', error: 'No video returned' };
                             return false;
                         }
                     } catch (err) {
+                        const message = err instanceof Error ? err.message : 'Unknown Veo error';
                         console.error(`Video generation failed for scene ${i + 1}:`, err);
-                        addSystemLog(`✗ Scene ${i + 1} failed - ${err}`);
-                        generatedScenes[i] = { ...generatedScenes[i], status: 'error' };
+                        addSystemLog(`✗ Scene ${i + 1} failed - ${message}`);
+                        generatedScenes[i] = { ...generatedScenes[i], status: 'error', error: message };
                         return false;
                     }
                 });
@@ -609,19 +627,31 @@ const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialP
         }
 
         setGeneratingSceneIndex(index);
+        addSystemLog(`Agent [MEDIA_SPECIALIST] rendering Scene ${index + 1}...`);
+        updateAgent(AgentRole.MEDIA_SPECIALIST, 'working', `Rendering Scene ${index + 1}...`);
         showToast(`Generating video for Scene ${index + 1}...`, 'info');
 
         try {
+            setScenes(prev => prev.map((s, i) => i === index ? { ...s, status: 'generating', error: undefined } : s));
             const videoUrl = await generateVeoVideo(scene.visual, aspectRatio, resolution);
             if (videoUrl) {
-                setScenes(prev => prev.map((s, i) => i === index ? { ...s, videoUrl, generated: true } : s));
+                setScenes(prev => prev.map((s, i) => i === index ? { ...s, videoUrl, generated: true, status: 'success', error: undefined } : s));
+                addSystemLog(`✓ Scene ${index + 1} rendered.`);
+                updateAgent(AgentRole.MEDIA_SPECIALIST, 'done', `Scene ${index + 1} rendered.`);
                 showToast(`Scene ${index + 1} video generated!`, 'success');
             } else {
+                setScenes(prev => prev.map((s, i) => i === index ? { ...s, status: 'error', error: 'No video returned' } : s));
+                addSystemLog(`✗ Scene ${index + 1} failed - no video returned.`);
+                updateAgent(AgentRole.MEDIA_SPECIALIST, 'done', `Scene ${index + 1} failed.`);
                 showToast('Video generation failed', 'error');
             }
         } catch (e) {
+            const message = e instanceof Error ? e.message : 'Unknown Veo error';
             console.error('Video generation error:', e);
-            showToast('Video generation failed - check API key', 'error');
+            setScenes(prev => prev.map((s, i) => i === index ? { ...s, status: 'error', error: message } : s));
+            addSystemLog(`✗ Scene ${index + 1} failed - ${message}`);
+            updateAgent(AgentRole.MEDIA_SPECIALIST, 'done', `Scene ${index + 1} failed.`);
+            showToast(`Video generation failed - ${message}`, 'error');
         } finally {
             setGeneratingSceneIndex(null);
         }
@@ -1069,8 +1099,8 @@ ${scenes.filter(s => s.videoUrl).map((s, i) => `Scene ${i + 1}: ${s.videoUrl}`).
                                         const newEnd = time;
                                         const newStart = time;
 
-                                        const sceneA = { ...scene, timestamp: `${formatTimestamp(start)}-${formatTimestamp(newEnd)}` };
-                                        const sceneB = { ...scene, timestamp: `${formatTimestamp(newStart)}-${formatTimestamp(end)}`, generated: false, videoUrl: undefined };
+                                        const sceneA = normalizeScene({ ...scene, timestamp: `${formatTimestamp(start)}-${formatTimestamp(newEnd)}` }, idx);
+                                        const sceneB = normalizeScene({ ...scene, timestamp: `${formatTimestamp(newStart)}-${formatTimestamp(end)}`, generated: false, videoUrl: undefined, status: 'pending', error: undefined }, idx + 1);
 
                                         setScenes(prev => [...prev.slice(0, idx), sceneA, sceneB, ...prev.slice(idx + 1)]);
                                         showToast('Scene split successfully', 'success');
@@ -1157,6 +1187,24 @@ ${scenes.filter(s => s.videoUrl).map((s, i) => `Scene ${i + 1}: ${s.videoUrl}`).
                                                                 <div className="w-2 h-2 rounded-full bg-slate-600"></div>
                                                             )}
                                                         </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-[11px]">
+                                                        {scene.status && (
+                                                            <span className={`px-2 py-0.5 rounded-full uppercase tracking-wide font-bold ${
+                                                                scene.status === 'success'
+                                                                    ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                                                                    : scene.status === 'error'
+                                                                        ? 'bg-red-500/10 text-red-400 border border-red-500/30'
+                                                                        : scene.status === 'generating'
+                                                                            ? 'bg-blue-500/10 text-blue-300 border border-blue-500/30'
+                                                                            : 'bg-slate-700 text-slate-300 border border-white/10'
+                                                            }`}>
+                                                                {scene.status}
+                                                            </span>
+                                                        )}
+                                                        {scene.error && (
+                                                            <span className="text-red-400 font-medium truncate" title={scene.error}>{scene.error}</span>
+                                                        )}
                                                     </div>
                                                     <textarea
                                                         value={scene.visual}

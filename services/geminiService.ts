@@ -428,28 +428,52 @@ export const generateVideoMetadata = async (topic: string, niche: string, visual
     return JSON.parse(cleanJson(response.text || '{"title":"", "description":"", "tags":[]}'));
 }
 
-export const generateVeoVideo = async (prompt: string, aspectRatio: '16:9' | '9:16', resolution: '720p' | '1080p' = '720p'): Promise<string | null> => {
+export const generateVeoVideo = async (
+    prompt: string,
+    aspectRatio: '16:9' | '9:16',
+    resolution: '720p' | '1080p' = '720p'
+): Promise<string | null> => {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) {
+        throw new Error('No prompt provided for Veo generation.');
+    }
+
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey || apiKey === 'GEMINI_API_KEY') {
+        throw new Error('Missing VITE_GEMINI_API_KEY for Veo generation.');
+    }
+
     const ai = await getClient(true);
     try {
         let operation = await ai.models.generateVideos({
             model: 'veo-3.1-fast-generate-preview',
-            prompt: prompt,
-            config: { numberOfVideos: 1, resolution: resolution, aspectRatio: aspectRatio }
+            prompt: trimmedPrompt,
+            config: { numberOfVideos: 1, resolution, aspectRatio }
         });
 
-        while (!operation.done) {
+        let attempts = 0;
+        const maxAttempts = 24; // 2 minutes with 5s polling
+
+        while (!operation.done && attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 5000));
-            operation = await ai.operations.getVideosOperation({ operation: operation });
+            operation = await ai.operations.getVideosOperation({ operation });
+            attempts++;
+        }
+
+        if (!operation.done) {
+            throw new Error('Video generation timed out.');
         }
 
         const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
-        if (!videoUri) return null;
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey || apiKey === 'GEMINI_API_KEY') return videoUri;
-    return `${videoUri}&key=${apiKey}`;
+        if (!videoUri) throw new Error('No video URL returned by Veo.');
+
+        // Ensure the key is attached when required and keep existing signatures intact
+        if (videoUri.includes('key=')) return videoUri;
+        const separator = videoUri.includes('?') ? '&' : '?';
+        return `${videoUri}${separator}key=${apiKey}`;
     } catch (e) {
         console.error("Veo generation failed", e);
-        return null;
+        throw e;
     }
 };
 

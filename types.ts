@@ -119,6 +119,7 @@ export interface Scene {
   videoUrl?: string;
   generated?: boolean;
   status?: 'pending' | 'generating' | 'success' | 'error';
+  error?: string;
   script?: string;       // The spoken text for this scene
   voiceoverUrl?: string; // The generated TTS audio URL
 }
