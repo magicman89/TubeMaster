@@ -41,6 +41,22 @@ export interface AutopilotConfig {
     }
 }
 
+export interface AutopilotConfigRow {
+    id?: string;
+    channel_id: string;
+    enabled: boolean;
+    platforms: string[]; // TEXT[] in DB
+    source: string;
+    auto_schedule: boolean;
+    frequency: string;
+    content_mix?: any;
+    publish_times?: string[];
+    approval_workflow?: string;
+    platform_settings?: any;
+    created_at?: string;
+    updated_at?: string;
+}
+
 export interface ChannelBranding {
     primaryColor: string;
     secondaryColor: string;
