@@ -60,9 +60,31 @@ serve(async (req) => {
             const lastRun = lastProject ? new Date(lastProject.created_at) : new Date(0);
             const hoursSinceLastRun = (Date.now() - lastRun.getTime()) / (1000 * 60 * 60);
 
-            // Default frequency: Daily (approx 24h). Allow some buffer (20h).
-            if (hoursSinceLastRun < 20 && config.frequency !== 'always_on') {
-                results.push({ channelId: channel.id, status: 'skipped', reason: 'Already ran today' });
+            // Frequency Logic
+            let shouldRun = false;
+            let requiredHours = 20; // Default daily
+
+            switch (config.frequency) {
+                case 'always_on':
+                    shouldRun = true;
+                    break;
+                case 'weekly':
+                    requiredHours = 24 * 6; // 6 days buffer
+                    shouldRun = hoursSinceLastRun > requiredHours;
+                    break;
+                case 'bi-weekly':
+                    requiredHours = 24 * 13; // 13 days buffer
+                    shouldRun = hoursSinceLastRun > requiredHours;
+                    break;
+                case 'daily':
+                default:
+                    requiredHours = 20; // 20 hours buffer
+                    shouldRun = hoursSinceLastRun > requiredHours;
+                    break;
+            }
+
+            if (!shouldRun) {
+                results.push({ channelId: channel.id, status: 'skipped', reason: `Frequency limit (${config.frequency}). Hours since last: ${hoursSinceLastRun.toFixed(1)}` });
                 continue;
             }
 

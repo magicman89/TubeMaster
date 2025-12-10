@@ -231,6 +231,18 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate, onOpenProje
     }
   };
 
+  const getProgress = (stage?: string) => {
+    switch (stage) {
+      case 'scripting': return 25;
+      case 'audio': return 50;
+      case 'visuals': return 75;
+      case 'merging': return 90;
+      case 'review': return 90;
+      case 'complete': return 100;
+      default: return 5;
+    }
+  };
+
   return (
     <div className="space-y-8 animate-fade-in max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-4 border-b border-white/5">
@@ -334,7 +346,19 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate, onOpenProje
                   </span>
                 </div>
                 <h3 className="font-bold text-white mb-1 truncate pr-8">{project.title}</h3>
-                <p className="text-xs text-slate-400 truncate mb-3">{project.pipelineStage || 'In Progress'}</p>
+
+                <div className="mb-3">
+                   <div className="flex justify-between items-end mb-1">
+                      <p className="text-xs text-slate-400 truncate">{project.pipelineStage || project.pipeline_stage || 'In Progress'}</p>
+                      <span className="text-[10px] text-slate-500">{getProgress(project.pipelineStage || project.pipeline_stage)}%</span>
+                   </div>
+                   <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500"
+                        style={{ width: `${getProgress(project.pipelineStage || project.pipeline_stage)}%` }}
+                      ></div>
+                   </div>
+                </div>
 
                 {project.videoUrl && (
                     <div className="absolute bottom-2 right-2">

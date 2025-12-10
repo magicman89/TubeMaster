@@ -129,7 +129,9 @@ export interface VideoProject {
   instructions?: string; // Specific user instructions for this slot
   socialPosts?: SocialPost[]; // Multi-platform content
   scenesData?: Scene[];
+  scenes_data?: Scene[]; // DB compatibility
   pipelineStage?: 'idea' | 'research' | 'scripting' | 'audio' | 'visuals' | 'rendering' | 'merging' | 'production' | 'review' | 'scheduled' | 'published' | 'analyzing' | 'complete';
+  pipeline_stage?: string; // DB compatibility
 }
 
 export interface SchedulerItem {
