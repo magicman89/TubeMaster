@@ -132,6 +132,7 @@ export interface VideoProject {
   scenes_data?: Scene[]; // DB compatibility
   pipelineStage?: 'idea' | 'research' | 'scripting' | 'audio' | 'visuals' | 'rendering' | 'merging' | 'production' | 'review' | 'scheduled' | 'published' | 'analyzing' | 'complete';
   pipeline_stage?: string; // DB compatibility
+  logs?: string[];
 }
 
 export interface SchedulerItem {

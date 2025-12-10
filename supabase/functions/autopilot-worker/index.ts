@@ -31,6 +31,7 @@ interface VideoProject {
     channel: { niche: string; style_memory: string[] };
     audio_url?: string;
     script?: string;
+    logs?: string[];
 }
 
 serve(async (req) => {
@@ -64,7 +65,14 @@ serve(async (req) => {
         let updates: any = {};
         let resultMessage = '';
 
+        // Append new log helper
+        const logs = project.logs || [];
+        const addLog = (msg: string) => {
+            logs.push(`[${new Date().toISOString()}] [${project.pipeline_stage}] ${msg}`);
+        };
+
         console.log(`Processing project ${project.id} at stage: ${project.pipeline_stage}`);
+        addLog(`Worker starting: processing ${project.pipeline_stage}`);
 
         // --- STAGE 1: SCRIPTING ---
         if (project.pipeline_stage === 'scripting') {
@@ -94,6 +102,7 @@ serve(async (req) => {
                     pipeline_stage: 'audio'
                 };
                 resultMessage = 'Script and scenes generated.';
+                addLog(resultMessage);
             } else {
                 throw new Error('Failed to parse Gemini response for script');
             }
@@ -133,6 +142,7 @@ serve(async (req) => {
                     audio_url: modifiedScenes[0]?.voiceoverUrl // Set master audio to first clip for preview
                 };
                 resultMessage = `Audio initialized for ${scenes.length} scenes.`;
+                addLog(resultMessage);
 
             } catch (e) {
                 throw new Error(`Audio generation failed: ${e}`);
@@ -184,6 +194,7 @@ serve(async (req) => {
             } else {
                 resultMessage = `Generated visual for scene.`;
             }
+            addLog(resultMessage);
         }
 
         // --- STAGE 4: MERGING ---
@@ -213,10 +224,14 @@ serve(async (req) => {
             };
 
             resultMessage = 'Project merged (simulated) and marked ready.';
+            addLog(resultMessage);
         }
 
         // 3. Apply Updates
         if (Object.keys(updates).length > 0) {
+            // Include log update
+            updates.logs = logs;
+
             const { error: updateError } = await supabase
                 .from('video_projects')
                 .update(updates)

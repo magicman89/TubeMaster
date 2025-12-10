@@ -45,7 +45,7 @@ const getClient = async (requirePaidKey: boolean = false) => {
             }
         }
     }
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+    return new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 };
 
 // 0. Audio Analysis Helper (Client-side logic)
@@ -444,8 +444,9 @@ export const generateVeoVideo = async (prompt: string, aspectRatio: '16:9' | '9:
 
         const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
         if (!videoUri) return null;
-        if (!process.env.API_KEY || process.env.API_KEY === 'GEMINI_API_KEY') return videoUri;
-        return `${videoUri}&key=${process.env.API_KEY}`;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey || apiKey === 'GEMINI_API_KEY') return videoUri;
+    return `${videoUri}&key=${apiKey}`;
     } catch (e) {
         console.error("Veo generation failed", e);
         return null;

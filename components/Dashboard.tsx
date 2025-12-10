@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Channel, View } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { Users, Eye, TrendingUp, Activity, Zap, Trophy, Youtube, Loader2, Link2, AlertCircle, PlayCircle, Clock } from 'lucide-react';
+import { Users, Eye, TrendingUp, Activity, Zap, Trophy, Youtube, Loader2, Link2, AlertCircle, PlayCircle, Clock, Terminal } from 'lucide-react';
 import { youtubeService, YouTubeAnalytics, YouTubeChannel } from '../services/youtubeService';
 import { supabase } from '../services/supabase';
 import { VideoProject } from '../types';
@@ -109,6 +109,7 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate, onOpenProje
   const [dateRange, setDateRange] = useState<'7' | '30'>('7');
   const [chartData, setChartData] = useState<DailyDataPoint[]>([]);
   const [recentProjects, setRecentProjects] = useState<VideoProject[]>([]);
+  const [activeLogs, setActiveLogs] = useState<string[] | null>(null);
 
   useEffect(() => {
     // Fetch recent projects for the active channel
@@ -321,6 +322,29 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate, onOpenProje
         />
       </div>
 
+      {/* Logs Modal Overlay */}
+      {activeLogs && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveLogs(null)}>
+            <div className="w-full max-w-2xl glass-panel rounded-2xl border border-white/10 overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="p-4 border-b border-white/10 flex justify-between items-center bg-black/40">
+                    <div className="flex items-center gap-2 text-slate-300">
+                        <Terminal className="w-4 h-4 text-green-400" />
+                        <span className="font-mono text-sm font-bold">System Logs</span>
+                    </div>
+                    <button onClick={() => setActiveLogs(null)} className="text-slate-400 hover:text-white">Close</button>
+                </div>
+                <div className="p-4 h-96 overflow-y-auto font-mono text-xs space-y-2 bg-[#050505]">
+                    {activeLogs.length === 0 && <p className="text-slate-600 italic">No logs recorded yet.</p>}
+                    {activeLogs.map((log, i) => (
+                        <div key={i} className="text-green-500/80 border-b border-white/5 pb-1">
+                            <span className="text-slate-600 mr-2">&gt;</span>{log}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* Active Pipeline / Recent Projects */}
       {recentProjects.length > 0 && (
         <div className="glass-panel rounded-2xl p-6">
@@ -331,41 +355,52 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate, onOpenProje
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {recentProjects.map(project => (
-              <button
+              <div
                 key={project.id}
-                onClick={() => onOpenProject?.(project.id)}
-                className="text-left p-4 rounded-xl bg-white/5 border border-white/5 hover:border-purple-500/50 hover:bg-white/10 transition-all group relative overflow-hidden"
+                className="relative text-left p-4 rounded-xl bg-white/5 border border-white/5 hover:border-purple-500/50 hover:bg-white/10 transition-all group overflow-hidden"
               >
-                <div className="flex justify-between items-start mb-2">
+                <div className="flex justify-between items-start mb-2" onClick={() => onOpenProject?.(project.id)}>
                   <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${getStatusColor(project.status)}`}>
                     {project.status}
                   </span>
-                  <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {new Date(project.date || Date.now()).toLocaleDateString()}
-                  </span>
+                  <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveLogs(project.logs || []); }}
+                        className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-green-400 transition-colors"
+                        title="View Logs"
+                      >
+                          <Terminal className="w-3 h-3" />
+                      </button>
+                      <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {new Date(project.date || Date.now()).toLocaleDateString()}
+                      </span>
+                  </div>
                 </div>
-                <h3 className="font-bold text-white mb-1 truncate pr-8">{project.title}</h3>
 
-                <div className="mb-3">
-                   <div className="flex justify-between items-end mb-1">
-                      <p className="text-xs text-slate-400 truncate">{project.pipelineStage || project.pipeline_stage || 'In Progress'}</p>
-                      <span className="text-[10px] text-slate-500">{getProgress(project.pipelineStage || project.pipeline_stage)}%</span>
-                   </div>
-                   <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500"
-                        style={{ width: `${getProgress(project.pipelineStage || project.pipeline_stage)}%` }}
-                      ></div>
-                   </div>
+                <div onClick={() => onOpenProject?.(project.id)} className="cursor-pointer">
+                    <h3 className="font-bold text-white mb-1 truncate pr-8">{project.title}</h3>
+
+                    <div className="mb-3">
+                       <div className="flex justify-between items-end mb-1">
+                          <p className="text-xs text-slate-400 truncate">{project.pipelineStage || project.pipeline_stage || 'In Progress'}</p>
+                          <span className="text-[10px] text-slate-500">{getProgress(project.pipelineStage || project.pipeline_stage)}%</span>
+                       </div>
+                       <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500"
+                            style={{ width: `${getProgress(project.pipelineStage || project.pipeline_stage)}%` }}
+                          ></div>
+                       </div>
+                    </div>
                 </div>
 
                 {project.videoUrl && (
-                    <div className="absolute bottom-2 right-2">
+                    <div className="absolute bottom-2 right-2 pointer-events-none">
                         <PlayCircle className="w-5 h-5 text-green-400 opacity-50 group-hover:opacity-100 transition-opacity" />
                     </div>
                 )}
-              </button>
+              </div>
             ))}
           </div>
         </div>
