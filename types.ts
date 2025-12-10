@@ -125,8 +125,11 @@ export interface VideoProject {
   audioUrl?: string;
   aspectRatio: '16:9' | '9:16';
   thumbnailPrompt?: string;
+  thumbnailUrl?: string;
   instructions?: string; // Specific user instructions for this slot
   socialPosts?: SocialPost[]; // Multi-platform content
+  scenesData?: Scene[];
+  pipelineStage?: 'idea' | 'research' | 'scripting' | 'audio' | 'visuals' | 'rendering' | 'merging' | 'production' | 'review' | 'scheduled' | 'published' | 'analyzing' | 'complete';
 }
 
 export interface SchedulerItem {

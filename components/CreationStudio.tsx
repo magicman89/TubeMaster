@@ -4,6 +4,7 @@ import { generateVideoPlan, generateVeoVideo, generateVideoMetadata, analyzeAudi
 import { useToast } from './ToastContext';
 import WaveformVisualizer from './WaveformVisualizer';
 import SequentialPlayer from './SequentialPlayer';
+import { supabase } from '../services/supabase';
 import {
     Music, Video, FileAudio, Wand2, Loader2, Play, Pause, Download, Copy, FileVideo,
     Bot, BrainCircuit, Sparkles, Send, Mic, RefreshCw, Layers, SkipForward, AlertCircle, CheckCircle2, Film, Check, Merge,
@@ -16,6 +17,7 @@ import {
 interface CreationStudioProps {
     activeChannel: Channel;
     initialPrompt?: string;
+    projectId?: string;
 }
 
 const VIDEO_TEMPLATES = [
@@ -274,7 +276,7 @@ const AutopilotConfigModal: React.FC<{
 };
 
 
-const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialPrompt }) => {
+const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialPrompt, projectId }) => {
     const { showToast } = useToast();
     const [mode, setMode] = useState<'CHAT' | 'AUTOPILOT' | 'EDITOR'>('CHAT');
 
@@ -318,13 +320,48 @@ const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialP
     const [socialPosts, setSocialPosts] = useState<SocialPost[]>([]);
     const [showAutopilotModal, setShowAutopilotModal] = useState(false);
 
-    // Initialize with passed prompt if any
+    // Initialize with passed prompt if any or load project
     useEffect(() => {
-        if (initialPrompt) {
+        if (projectId) {
+            // Load existing project
+            const loadProject = async () => {
+                showToast('Loading existing project...', 'info');
+                try {
+                    const { data: project, error } = await supabase
+                        .from('video_projects')
+                        .select('*')
+                        .eq('id', projectId)
+                        .single();
+
+                    if (error) throw error;
+                    if (project) {
+                        setMode('EDITOR');
+                        if (project.scenes_data) {
+                            setScenes(project.scenes_data);
+                        }
+                        setChatInput(project.title);
+                        if (project.social_posts) {
+                            setSocialPosts(project.social_posts);
+                        }
+                        // Handle audio if URL exists
+                        if (project.audio_url) {
+                            setAudioUrl(project.audio_url);
+                            // Fake analysis since we can't analyze URL easily without fetch/blob
+                            // or fetch it as blob
+                        }
+                        showToast('Project loaded!', 'success');
+                    }
+                } catch (e) {
+                    console.error('Failed to load project:', e);
+                    showToast('Failed to load project', 'error');
+                }
+            };
+            loadProject();
+        } else if (initialPrompt) {
             setChatInput(initialPrompt);
             setMessages(prev => [...prev, { role: 'user', text: initialPrompt }]);
         }
-    }, [initialPrompt]);
+    }, [initialPrompt, projectId]);
 
     const addSystemLog = (message: string) => {
         setSystemLogs(prev => {

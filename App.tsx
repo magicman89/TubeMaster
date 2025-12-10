@@ -157,6 +157,7 @@ const App: React.FC = () => {
   const [isAddChannelModalOpen, setIsAddChannelModalOpen] = useState(false);
   const [studioKey, setStudioKey] = useState(0);
   const [initialStudioPrompt, setInitialStudioPrompt] = useState<string>('');
+  const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
 
   const activeChannel = channels.find(c => c.id === activeChannelId) || channels[0];
 
@@ -171,18 +172,28 @@ const App: React.FC = () => {
 
   const handleNewVideo = () => {
     setInitialStudioPrompt('');
+    setActiveProjectId(undefined);
     setCurrentView(View.STUDIO);
     setStudioKey(prev => prev + 1);
   };
 
   const handleStartProjectFromResearch = (prompt: string) => {
     setInitialStudioPrompt(prompt);
+    setActiveProjectId(undefined);
     setCurrentView(View.STUDIO);
     setStudioKey(prev => prev + 1); // Reset studio to accept new prompt
   };
 
   const handlePromoteIdea = (idea: Idea) => {
     setInitialStudioPrompt(idea.content);
+    setActiveProjectId(undefined);
+    setCurrentView(View.STUDIO);
+    setStudioKey(prev => prev + 1);
+  };
+
+  const handleOpenProject = (projectId: string) => {
+    setActiveProjectId(projectId);
+    setInitialStudioPrompt('');
     setCurrentView(View.STUDIO);
     setStudioKey(prev => prev + 1);
   };
@@ -191,12 +202,12 @@ const App: React.FC = () => {
   const renderView = () => {
     switch (currentView) {
       case View.DASHBOARD:
-        return <Dashboard channels={channels} onNavigate={setCurrentView} />;
+        return <Dashboard channels={channels} onNavigate={setCurrentView} onOpenProject={handleOpenProject} activeChannelId={activeChannel.id} />;
       case View.RESEARCH:
         return <ResearchHub activeChannel={activeChannel} onStartProject={handleStartProjectFromResearch} />;
       case View.STUDIO:
         // Key includes channel ID to reset when channel switches, and studioKey to reset on "New Video"
-        return <CreationStudio key={`${activeChannel.id}-${studioKey}`} activeChannel={activeChannel} initialPrompt={initialStudioPrompt} />;
+        return <CreationStudio key={`${activeChannel.id}-${studioKey}`} activeChannel={activeChannel} initialPrompt={initialStudioPrompt} projectId={activeProjectId} />;
       case View.VAULT:
         return <IdeaVault onPromoteIdea={handlePromoteIdea} />;
       case View.SCHEDULER:

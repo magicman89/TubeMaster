@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS video_projects (
     social_posts JSONB DEFAULT '[]',
     youtube_video_id TEXT,
     pipeline_stage TEXT DEFAULT 'idea',
+    scenes_data JSONB DEFAULT '[]',
     virality_score INTEGER,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -138,7 +139,7 @@ CREATE TABLE IF NOT EXISTS pipeline_items (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     channel_id UUID REFERENCES channels(id) ON DELETE CASCADE,
     project_id UUID REFERENCES video_projects(id) ON DELETE SET NULL,
-    stage TEXT DEFAULT 'idea' CHECK (stage IN ('idea', 'research', 'scripting', 'production', 'review', 'scheduled', 'published', 'analyzing')),
+    stage TEXT DEFAULT 'idea' CHECK (stage IN ('idea', 'research', 'scripting', 'audio', 'visuals', 'rendering', 'merging', 'production', 'review', 'scheduled', 'published', 'analyzing', 'complete')),
     automation_level TEXT DEFAULT 'assisted' CHECK (automation_level IN ('full', 'assisted', 'manual')),
     approval_required BOOLEAN DEFAULT TRUE,
     approved BOOLEAN DEFAULT FALSE,

@@ -3,12 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import { Channel, View } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { Users, Eye, TrendingUp, Activity, Zap, Trophy, Youtube, Loader2, Link2, AlertCircle } from 'lucide-react';
+import { Users, Eye, TrendingUp, Activity, Zap, Trophy, Youtube, Loader2, Link2, AlertCircle, PlayCircle, Clock } from 'lucide-react';
 import { youtubeService, YouTubeAnalytics, YouTubeChannel } from '../services/youtubeService';
+import { supabase } from '../services/supabase';
+import { VideoProject } from '../types';
 
 interface DashboardProps {
   channels: Channel[];
   onNavigate?: (view: View) => void;
+  onOpenProject?: (projectId: string) => void;
+  activeChannelId?: string;
 }
 
 interface DailyDataPoint {
@@ -96,7 +100,7 @@ const ConnectYouTubeCTA: React.FC<{ onNavigate?: (view: View) => void }> = ({ on
   </div>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate }) => {
+const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate, onOpenProject, activeChannelId }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +108,29 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate }) => {
   const [channelInfo, setChannelInfo] = useState<YouTubeChannel | null>(null);
   const [dateRange, setDateRange] = useState<'7' | '30'>('7');
   const [chartData, setChartData] = useState<DailyDataPoint[]>([]);
+  const [recentProjects, setRecentProjects] = useState<VideoProject[]>([]);
+
+  useEffect(() => {
+    // Fetch recent projects for the active channel
+    // Safety check for activeChannelId to prevent crash if undefined
+    if (activeChannelId) {
+      const fetchProjects = async () => {
+        try {
+            const { data } = await supabase
+            .from('video_projects')
+            .select('*')
+            .eq('channel_id', activeChannelId)
+            .order('updated_at', { ascending: false })
+            .limit(5);
+
+            if (data) setRecentProjects(data as VideoProject[]);
+        } catch (e) {
+            console.error("Failed to fetch projects", e);
+        }
+      };
+      fetchProjects();
+    }
+  }, [activeChannelId]);
 
   // Check connection and load data
   useEffect(() => {
@@ -180,6 +207,15 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate }) => {
   const formatMinutes = (mins: number): string => {
     if (mins >= 60) return `${(mins / 60).toFixed(1)}h`;
     return `${mins}m`;
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ready': return 'text-green-400 border-green-500/30 bg-green-500/10';
+      case 'production': return 'text-blue-400 border-blue-500/30 bg-blue-500/10';
+      case 'draft': return 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10';
+      default: return 'text-slate-400 border-slate-500/30 bg-slate-500/10';
+    }
   };
 
   return (
@@ -259,6 +295,44 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate }) => {
           loading={loading && isConnected}
         />
       </div>
+
+      {/* Active Pipeline / Recent Projects */}
+      {recentProjects.length > 0 && (
+        <div className="glass-panel rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Activity className="w-5 h-5 text-purple-400" /> Active Pipeline
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recentProjects.map(project => (
+              <button
+                key={project.id}
+                onClick={() => onOpenProject?.(project.id)}
+                className="text-left p-4 rounded-xl bg-white/5 border border-white/5 hover:border-purple-500/50 hover:bg-white/10 transition-all group relative overflow-hidden"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${getStatusColor(project.status)}`}>
+                    {project.status}
+                  </span>
+                  <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(project.date || Date.now()).toLocaleDateString()}
+                  </span>
+                </div>
+                <h3 className="font-bold text-white mb-1 truncate pr-8">{project.title}</h3>
+                <p className="text-xs text-slate-400 truncate mb-3">{project.pipelineStage || 'In Progress'}</p>
+
+                {project.videoUrl && (
+                    <div className="absolute bottom-2 right-2">
+                        <PlayCircle className="w-5 h-5 text-green-400 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Charts - Only show when connected */}
       {isConnected && (
