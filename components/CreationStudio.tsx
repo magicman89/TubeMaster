@@ -346,8 +346,6 @@ const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialP
                         // Handle audio if URL exists
                         if (project.audio_url) {
                             setAudioUrl(project.audio_url);
-                            // Fake analysis since we can't analyze URL easily without fetch/blob
-                            // or fetch it as blob
                         }
                         showToast('Project loaded!', 'success');
                     }
@@ -357,6 +355,35 @@ const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialP
                 }
             };
             loadProject();
+
+            // Realtime Updates for current project
+            const channel = supabase
+                .channel(`public:video_projects:${projectId}`)
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'video_projects', filter: `id=eq.${projectId}` }, (payload) => {
+                    const newData = payload.new as any;
+                    if (newData.scenes_data) {
+                        // Merge logic: only update if we have new generated clips or status changes
+                        // We don't want to overwrite local edits if the user is typing
+                        // For simplicity, we just notify "Update Available" or auto-update visual status
+                        // Ideally we check specific fields.
+                        // Here we will just update the scenes that have changed from pending -> success
+                        setScenes(prev => {
+                            const newScenes = newData.scenes_data;
+                            return prev.map((s, i) => {
+                                // If local is pending and remote is success, update
+                                if (s.status !== 'success' && newScenes[i]?.status === 'success') {
+                                    showToast(`Scene ${i+1} ready!`, 'success');
+                                    return newScenes[i];
+                                }
+                                return s;
+                            });
+                        });
+                    }
+                })
+                .subscribe();
+
+            return () => { supabase.removeChannel(channel); };
+
         } else if (initialPrompt) {
             setChatInput(initialPrompt);
             setMessages(prev => [...prev, { role: 'user', text: initialPrompt }]);
@@ -601,6 +628,7 @@ const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialP
     };
 
     const handleExportProject = () => {
+        // Export as JSON (standard)
         const projectData = {
             channel: activeChannel.name,
             aspectRatio,
@@ -621,7 +649,108 @@ const CreationStudio: React.FC<CreationStudioProps> = ({ activeChannel, initialP
         a.download = `tubemaster-project-${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast('Project exported!', 'success');
+        showToast('Project JSON exported!', 'success');
+    };
+
+    const handleExportXML = () => {
+        // Generate FCPXML (Final Cut Pro 7 XML) compatible with Premiere/Resolve
+        const clipsWithUrls = scenes.filter(s => s.videoUrl);
+        if (clipsWithUrls.length === 0) {
+            showToast('No clips to export', 'error');
+            return;
+        }
+
+        const xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE xmeml>
+<xmeml version="4">
+    <project>
+        <name>TubeMaster Export</name>
+        <children>
+            <sequence>
+                <name>Sequence 1</name>
+                <duration>${Math.ceil(audioDuration * 30)}</duration>
+                <rate>
+                    <timebase>30</timebase>
+                    <ntsc>TRUE</ntsc>
+                </rate>
+                <media>
+                    <video>
+                        <format>
+                            <samplecharacteristics>
+                                <rate>
+                                    <timebase>30</timebase>
+                                    <ntsc>TRUE</ntsc>
+                                </rate>
+                                <width>1920</width>
+                                <height>1080</height>
+                                <pixelaspectratio>square</pixelaspectratio>
+                            </samplecharacteristics>
+                        </format>
+                        <track>
+                            ${clipsWithUrls.map((s, i) => {
+                                const durationFrames = 30 * 4; // Approx 4s per clip default
+                                return `<clipitem id="clipitem-${i+1}">
+                                    <name>Scene ${i+1}</name>
+                                    <duration>${durationFrames}</duration>
+                                    <rate>
+                                        <timebase>30</timebase>
+                                        <ntsc>TRUE</ntsc>
+                                    </rate>
+                                    <start>${i * durationFrames}</start>
+                                    <end>${(i+1) * durationFrames}</end>
+                                    <in>0</in>
+                                    <out>${durationFrames}</out>
+                                    <file id="file-${i+1}">
+                                        <name>scene-${i+1}.mp4</name>
+                                        <pathurl>${s.videoUrl?.replace(/&/g, '&amp;')}</pathurl>
+                                        <rate>
+                                            <timebase>30</timebase>
+                                            <ntsc>TRUE</ntsc>
+                                        </rate>
+                                        <media>
+                                            <video>
+                                                <samplecharacteristics>
+                                                    <rate>
+                                                        <timebase>30</timebase>
+                                                        <ntsc>TRUE</ntsc>
+                                                    </rate>
+                                                    <width>1920</width>
+                                                    <height>1080</height>
+                                                </samplecharacteristics>
+                                            </video>
+                                        </media>
+                                    </file>
+                                </clipitem>`;
+                            }).join('\n')}
+                        </track>
+                    </video>
+                    <audio>
+                        <track>
+                             <clipitem id="audio-1">
+                                <name>Audio Track</name>
+                                <file id="audiofile-1">
+                                    <name>audio.mp3</name>
+                                    <pathurl>${audioUrl || ''}</pathurl>
+                                </file>
+                                <start>0</start>
+                                <end>${Math.ceil(audioDuration * 30)}</end>
+                             </clipitem>
+                        </track>
+                    </audio>
+                </media>
+            </sequence>
+        </children>
+    </project>
+</xmeml>`;
+
+        const blob = new Blob([xmlContent], { type: 'text/xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tubemaster-export-${Date.now()}.xml`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('Premiere/Resolve XML exported!', 'success');
     };
 
     const getCompletedClipsCount = () => scenes.filter(s => s.videoUrl).length;
@@ -1081,7 +1210,14 @@ ${scenes.filter(s => s.videoUrl).map((s, i) => `Scene ${i + 1}: ${s.videoUrl}`).
                                         onClick={handleExportProject}
                                         className="w-full bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2"
                                     >
-                                        <Download className="w-4 h-4" /> Export Project
+                                        <Download className="w-4 h-4" /> Export JSON
+                                    </button>
+
+                                    <button
+                                        onClick={handleExportXML}
+                                        className="w-full bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Share2 className="w-4 h-4" /> Export XML (Premiere)
                                     </button>
                                 </div>
                             </div>

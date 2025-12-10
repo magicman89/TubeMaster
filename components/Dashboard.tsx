@@ -129,6 +129,19 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate, onOpenProje
         }
       };
       fetchProjects();
+
+      // Subscribe to real-time updates for projects
+      const channel = supabase
+        .channel('public:video_projects')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'video_projects', filter: `channel_id=eq.${activeChannelId}` }, (payload) => {
+            console.log('Real-time project update:', payload);
+            fetchProjects(); // Refresh list on change
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [activeChannelId]);
 
