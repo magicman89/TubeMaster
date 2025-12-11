@@ -1,10 +1,68 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Save, RefreshCw, Smartphone, Monitor, Mic2, User, Database, Radio, Youtube, Key, Palette, Target, Users, Hash, Layout, Plus, X, Image as ImageIcon, Upload, Sparkles, Link2, BrainCircuit } from 'lucide-react';
-import { Channel, ChannelNiche, AutopilotConfigRow } from '../types';
+import { Settings, Save, RefreshCw, Smartphone, Monitor, Mic2, User, Database, Radio, Youtube, Key, Palette, Target, Users, Hash, Layout, Plus, X, Image as ImageIcon, Upload, Sparkles, Link2, BrainCircuit, Wand2, Layers, Copy, Check, DollarSign, Zap, Music } from 'lucide-react';
+import { Channel, ChannelNiche, AutopilotConfigRow, StylePreset, DEFAULT_STYLE_PRESETS } from '../types';
 import { useToast } from './ToastContext';
 import YouTubeConnect from './YouTubeConnect';
 import { supabase } from '../services/supabase';
+
+// Style Preset Card Component
+const StylePresetCard: React.FC<{
+    preset: StylePreset | Omit<StylePreset, 'id'>;
+    isActive: boolean;
+    onSelect: () => void;
+    onApply: () => void;
+}> = ({ preset, isActive, onSelect, onApply }) => (
+    <div
+        onClick={onSelect}
+        className={`relative p-4 rounded-xl border cursor-pointer transition-all ${
+            isActive
+                ? 'border-purple-500 bg-purple-500/10 ring-2 ring-purple-500/30'
+                : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
+        }`}
+    >
+        {/* Color Preview */}
+        <div className="flex gap-1 mb-3">
+            <div
+                className="w-6 h-6 rounded-full border border-white/20"
+                style={{ backgroundColor: preset.colorPalette.primary }}
+            />
+            <div
+                className="w-6 h-6 rounded-full border border-white/20"
+                style={{ backgroundColor: preset.colorPalette.secondary }}
+            />
+            <div
+                className="w-6 h-6 rounded-full border border-white/20"
+                style={{ backgroundColor: preset.colorPalette.accent }}
+            />
+        </div>
+
+        <h4 className="font-bold text-white text-sm mb-1">{preset.name}</h4>
+        <p className="text-[10px] text-slate-400 line-clamp-2 mb-2">{preset.description}</p>
+
+        <div className="flex flex-wrap gap-1 mb-3">
+            {preset.moodKeywords.slice(0, 3).map((mood, i) => (
+                <span key={i} className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-slate-400">
+                    {mood}
+                </span>
+            ))}
+        </div>
+
+        <button
+            onClick={(e) => { e.stopPropagation(); onApply(); }}
+            className="w-full py-1.5 text-xs font-bold rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors flex items-center justify-center gap-1"
+        >
+            <Wand2 className="w-3 h-3" />
+            Apply Style
+        </button>
+
+        {isActive && (
+            <div className="absolute top-2 right-2">
+                <Check className="w-4 h-4 text-purple-400" />
+            </div>
+        )}
+    </div>
+);
 
 interface SettingsProps {
     activeChannel?: Channel;
@@ -28,14 +86,66 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
     const [newStyleTag, setNewStyleTag] = useState('');
     const [autopilotConfig, setAutopilotConfig] = useState<AutopilotConfigRow | null>(null);
 
+    // Style Presets State
+    const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
+    const [activePresetId, setActivePresetId] = useState<string | null>(null);
+    const [bulkEnabled, setBulkEnabled] = useState(false);
+    const [bulkVariations, setBulkVariations] = useState(3);
+    const [outputFormats, setOutputFormats] = useState<string[]>(['16:9']);
+
     const [isSaved, setIsSaved] = useState(false);
 
     useEffect(() => {
         if (activeChannel) {
             setChannelForm(JSON.parse(JSON.stringify(activeChannel))); // Deep copy
             fetchAutopilotConfig(activeChannel.id);
+            fetchStylePresets(activeChannel.id);
         }
     }, [activeChannel]);
+
+    const fetchStylePresets = async (channelId: string) => {
+        try {
+            // Fetch global + channel-specific presets
+            const { data, error } = await supabase
+                .from('style_presets')
+                .select('*')
+                .or(`channel_id.is.null,channel_id.eq.${channelId}`)
+                .order('is_default', { ascending: false });
+
+            if (data) {
+                setStylePresets(data as StylePreset[]);
+            } else if (error) {
+                // Fall back to default presets if table doesn't exist yet
+                console.log('Using default presets');
+                setStylePresets(DEFAULT_STYLE_PRESETS.map((p, i) => ({ ...p, id: `default-${i}` })) as StylePreset[]);
+            }
+        } catch (e) {
+            console.error("Failed to fetch style presets", e);
+            setStylePresets(DEFAULT_STYLE_PRESETS.map((p, i) => ({ ...p, id: `default-${i}` })) as StylePreset[]);
+        }
+    };
+
+    const applyStylePreset = (preset: StylePreset | Omit<StylePreset, 'id'>) => {
+        if (!channelForm) return;
+
+        // Apply preset to channel
+        setChannelForm({
+            ...channelForm,
+            styleMemory: preset.styleMemory,
+            defaultPromptEnhancers: preset.promptEnhancers,
+            branding: {
+                ...channelForm.branding,
+                primaryColor: preset.colorPalette.primary,
+                secondaryColor: preset.colorPalette.secondary
+            }
+        });
+
+        if ('id' in preset) {
+            setActivePresetId(preset.id);
+        }
+
+        showToast(`Applied "${preset.name}" style preset`, 'success');
+    };
 
     const fetchAutopilotConfig = async (channelId: string) => {
         try {
@@ -220,6 +330,38 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                         <span className="text-sm font-bold text-white">Veo Video</span>
                                     </div>
                                     <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full border border-yellow-500/20">Standby</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Cost Dashboard */}
+                        <div className="glass-panel p-6 rounded-2xl border border-green-500/20">
+                            <div className="flex items-center gap-2 mb-4">
+                                <DollarSign className="w-4 h-4 text-green-400" />
+                                <h3 className="text-sm font-bold text-slate-300 uppercase tracking-widest">API Costs (Est.)</h3>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center p-2 bg-white/5 rounded-lg">
+                                    <span className="text-xs text-slate-400">Gemini Text</span>
+                                    <span className="text-xs font-mono text-green-400">~$0.001/1K tokens</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-white/5 rounded-lg">
+                                    <span className="text-xs text-slate-400">Gemini TTS</span>
+                                    <span className="text-xs font-mono text-green-400">~$0.001/sec</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-white/5 rounded-lg">
+                                    <span className="text-xs text-slate-400">Veo Video</span>
+                                    <span className="text-xs font-mono text-yellow-400">~$0.05/sec</span>
+                                </div>
+                                <div className="flex justify-between items-center p-2 bg-white/5 rounded-lg">
+                                    <span className="text-xs text-slate-400">Imagen</span>
+                                    <span className="text-xs font-mono text-green-400">~$0.02/image</span>
+                                </div>
+                                <div className="border-t border-white/10 pt-3 mt-3">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold text-slate-300">Est. per Video (5 scenes)</span>
+                                        <span className="text-sm font-mono font-bold text-green-400">~$2.50</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -636,6 +778,122 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                     />
                                 </div>
                             </div>
+                        </section>
+
+                        {/* Style Presets Library */}
+                        <section className="glass-panel p-6 rounded-2xl border border-purple-500/20">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <Wand2 className="w-5 h-5 text-purple-400" />
+                                    <div>
+                                        <h2 className="text-lg font-bold text-white">Style Presets</h2>
+                                        <p className="text-xs text-slate-400">Quick-apply visual styles for music videos</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-2">
+                                {(stylePresets.length > 0 ? stylePresets : DEFAULT_STYLE_PRESETS.map((p, i) => ({ ...p, id: `default-${i}` }))).map((preset) => (
+                                    <StylePresetCard
+                                        key={'id' in preset ? preset.id : preset.name}
+                                        preset={preset}
+                                        isActive={'id' in preset && preset.id === activePresetId}
+                                        onSelect={() => 'id' in preset && setActivePresetId(preset.id)}
+                                        onApply={() => applyStylePreset(preset)}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* Bulk Generation & Multi-Format */}
+                        <section className="glass-panel p-6 rounded-2xl border border-orange-500/20">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <Layers className="w-5 h-5 text-orange-400" />
+                                    <div>
+                                        <h2 className="text-lg font-bold text-white">Bulk & Multi-Format</h2>
+                                        <p className="text-xs text-slate-400">Generate variations and multiple formats</p>
+                                    </div>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={bulkEnabled}
+                                        onChange={(e) => setBulkEnabled(e.target.checked)}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                                </label>
+                            </div>
+
+                            {bulkEnabled && (
+                                <div className="space-y-4 animate-fade-in">
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between">
+                                            <label className="text-xs font-bold text-slate-500 uppercase">Variations per Concept</label>
+                                            <span className="text-xs font-mono text-orange-400">{bulkVariations}x</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="1"
+                                            max="10"
+                                            value={bulkVariations}
+                                            onChange={(e) => setBulkVariations(parseInt(e.target.value))}
+                                            className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                                        />
+                                        <p className="text-[10px] text-slate-500">Generate multiple variations for A/B testing</p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Output Formats</label>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setOutputFormats(prev =>
+                                                    prev.includes('16:9') ? prev.filter(f => f !== '16:9') : [...prev, '16:9']
+                                                )}
+                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${
+                                                    outputFormats.includes('16:9')
+                                                        ? 'bg-orange-600 text-white border-orange-500'
+                                                        : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
+                                                }`}
+                                            >
+                                                <Monitor className="w-4 h-4" /> 16:9
+                                            </button>
+                                            <button
+                                                onClick={() => setOutputFormats(prev =>
+                                                    prev.includes('9:16') ? prev.filter(f => f !== '9:16') : [...prev, '9:16']
+                                                )}
+                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${
+                                                    outputFormats.includes('9:16')
+                                                        ? 'bg-orange-600 text-white border-orange-500'
+                                                        : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
+                                                }`}
+                                            >
+                                                <Smartphone className="w-4 h-4" /> 9:16
+                                            </button>
+                                            <button
+                                                onClick={() => setOutputFormats(prev =>
+                                                    prev.includes('1:1') ? prev.filter(f => f !== '1:1') : [...prev, '1:1']
+                                                )}
+                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${
+                                                    outputFormats.includes('1:1')
+                                                        ? 'bg-orange-600 text-white border-orange-500'
+                                                        : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
+                                                }`}
+                                            >
+                                                <Hash className="w-4 h-4" /> 1:1
+                                            </button>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500">Auto-generate for TikTok (9:16) and Instagram (1:1)</p>
+                                    </div>
+
+                                    <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                                        <p className="text-[10px] text-orange-300 leading-relaxed">
+                                            <span className="font-bold">Output:</span> Each video will generate {bulkVariations} variations in {outputFormats.length} format{outputFormats.length > 1 ? 's' : ''} = {bulkVariations * outputFormats.length} total files per concept.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </section>
                     </div>
 
