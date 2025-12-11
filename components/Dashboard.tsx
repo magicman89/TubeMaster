@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Channel, View } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { Users, Eye, TrendingUp, Activity, Zap, Trophy, Youtube, Loader2, Link2, AlertCircle, PlayCircle, Clock, Terminal } from 'lucide-react';
+import { Users, Eye, TrendingUp, Activity, Zap, Trophy, Youtube, Loader2, Link2, AlertCircle, PlayCircle, Clock, Terminal, Download, Package } from 'lucide-react';
 import { youtubeService, YouTubeAnalytics, YouTubeChannel } from '../services/youtubeService';
 import { supabase } from '../services/supabase';
 import { VideoProject } from '../types';
@@ -110,6 +110,107 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate, onOpenProje
   const [chartData, setChartData] = useState<DailyDataPoint[]>([]);
   const [recentProjects, setRecentProjects] = useState<VideoProject[]>([]);
   const [activeLogs, setActiveLogs] = useState<string[] | null>(null);
+  const [downloadingProject, setDownloadingProject] = useState<string | null>(null);
+
+  // Download all assets for a project
+  const downloadAllAssets = async (project: VideoProject) => {
+    setDownloadingProject(project.id);
+
+    try {
+      const assets: { url: string; filename: string }[] = [];
+      const projectSlug = project.title.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
+
+      // Add main video if exists
+      if (project.videoUrl || project.video_url) {
+        assets.push({
+          url: project.videoUrl || project.video_url || '',
+          filename: `${projectSlug}_main_video.mp4`
+        });
+      }
+
+      // Add thumbnail if exists
+      if (project.thumbnailUrl || project.thumbnail_url) {
+        const thumbUrl = project.thumbnailUrl || project.thumbnail_url || '';
+        if (thumbUrl.startsWith('data:')) {
+          // Base64 thumbnail - create blob and download
+          const link = document.createElement('a');
+          link.href = thumbUrl;
+          link.download = `${projectSlug}_thumbnail.png`;
+          link.click();
+        } else {
+          assets.push({
+            url: thumbUrl,
+            filename: `${projectSlug}_thumbnail.png`
+          });
+        }
+      }
+
+      // Add scene videos and audio
+      const scenes = project.scenesData || project.scenes_data || [];
+      scenes.forEach((scene: { videoUrl?: string; voiceoverUrl?: string }, index: number) => {
+        if (scene.videoUrl) {
+          assets.push({
+            url: scene.videoUrl,
+            filename: `${projectSlug}_scene_${index + 1}_video.mp4`
+          });
+        }
+        if (scene.voiceoverUrl && !scene.voiceoverUrl.startsWith('data:')) {
+          assets.push({
+            url: scene.voiceoverUrl,
+            filename: `${projectSlug}_scene_${index + 1}_audio.mp3`
+          });
+        }
+      });
+
+      // Download each asset
+      for (const asset of assets) {
+        try {
+          const response = await fetch(asset.url);
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = asset.filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+
+          // Small delay between downloads
+          await new Promise(r => setTimeout(r, 500));
+        } catch (e) {
+          console.error(`Failed to download ${asset.filename}:`, e);
+        }
+      }
+
+      // Also download project metadata as JSON
+      const metadata = {
+        title: project.title,
+        description: project.description,
+        tags: project.tags,
+        script: project.script,
+        scenes: scenes.map((s: { timestamp?: string; visual?: string; script?: string }, i: number) => ({
+          index: i + 1,
+          timestamp: s.timestamp,
+          visual: s.visual,
+          script: s.script
+        }))
+      };
+
+      const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
+      const metadataUrl = window.URL.createObjectURL(metadataBlob);
+      const metadataLink = document.createElement('a');
+      metadataLink.href = metadataUrl;
+      metadataLink.download = `${projectSlug}_metadata.json`;
+      metadataLink.click();
+      window.URL.revokeObjectURL(metadataUrl);
+
+    } catch (e) {
+      console.error('Download failed:', e);
+    } finally {
+      setDownloadingProject(null);
+    }
+  };
 
   useEffect(() => {
     // Fetch recent projects for the active channel
@@ -364,6 +465,18 @@ const Dashboard: React.FC<DashboardProps> = ({ channels, onNavigate, onOpenProje
                     {project.status}
                   </span>
                   <div className="flex items-center gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); downloadAllAssets(project); }}
+                        className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-blue-400 transition-colors disabled:opacity-50"
+                        title="Download All Assets"
+                        disabled={downloadingProject === project.id}
+                      >
+                          {downloadingProject === project.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Download className="w-3 h-3" />
+                          )}
+                      </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); setActiveLogs(project.logs || []); }}
                         className="p-1 hover:bg-white/10 rounded text-slate-500 hover:text-green-400 transition-colors"

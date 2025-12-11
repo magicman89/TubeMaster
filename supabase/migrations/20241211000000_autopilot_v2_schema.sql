@@ -65,8 +65,9 @@ ADD COLUMN IF NOT EXISTS last_error TEXT,
 ADD COLUMN IF NOT EXISTS scheduled_publish_time TIMESTAMPTZ;
 
 -- Add approval workflow to autopilot_configs
+-- Default is 'auto-publish' for full hands-off automation
 ALTER TABLE autopilot_configs
-ADD COLUMN IF NOT EXISTS approval_workflow TEXT DEFAULT 'review-before-publish'
+ADD COLUMN IF NOT EXISTS approval_workflow TEXT DEFAULT 'auto-publish'
     CHECK (approval_workflow IN ('auto-publish', 'review-before-publish', 'manual'));
 
 -- Add error tracking to pipeline_items
