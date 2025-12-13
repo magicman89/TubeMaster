@@ -35,14 +35,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     window.history.replaceState(null, '', window.location.pathname);
                 }
 
-                // Get session (Supabase client handles hash tokens automatically)
-                const { data } = await supabase.auth.getSession();
+                // Get session with timeout to prevent hanging
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Auth initialization timed out')), 5000)
+                );
+
+                const { data } = await Promise.race([
+                    supabase.auth.getSession(),
+                    timeoutPromise
+                ]) as { data: { session: Session | null } };
+
                 if (data?.session) {
                     setSession(data.session);
                     setUser(data.session.user);
                 }
             } catch (e) {
-                console.error('Auth initialization error:', e);
+                console.warn('Auth initialization warning (proceeding to app):', e);
             } finally {
                 // Always stop loading regardless of success/failure
                 setLoading(false);
@@ -147,11 +155,20 @@ export function useSupabaseQuery<T>(
                 query = query.limit(options.limit);
             }
 
-            const { data: result, error: queryError } = await query;
+            // Add timeout to query
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Data fetch timed out')), 10000)
+            );
+
+            const { data: result, error: queryError } = await Promise.race([
+                query,
+                timeoutPromise
+            ]) as { data: T[] | null, error: any };
 
             if (queryError) throw queryError;
-            setData(result as T[]);
+            setData(result as T[] || []);
         } catch (e) {
+            console.error(`Error fetching ${tableName}:`, e);
             setError(e as Error);
         } finally {
             setLoading(false);
