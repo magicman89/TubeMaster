@@ -184,48 +184,48 @@ const AppContent: React.FC = () => {
     const { data: { user: currentUser } } = await supabase.auth.getUser();
     if (!currentUser) {
       console.error('User not authenticated - cannot create channel');
+      alert('Please log in to create a channel');
       return;
     }
 
-    // Insert to Supabase with proper schema mapping
-    const { data, error } = await supabase
-      .from('channels')
-      .insert({
-        name: newChannel.name,
-        niche: newChannel.niche,
-        subscribers: newChannel.subscribers,
-        avatar: newChannel.avatar,
-        style_memory: newChannel.styleMemory || [],
-        default_prompt_enhancers: newChannel.defaultPromptEnhancers || '',
-        branding: newChannel.branding || {},
-        goals: newChannel.goals || {},
-        audience: newChannel.audience || {},
-        user_id: currentUser.id,
-      })
-      .select()
-      .single();
+    try {
+      // Insert to Supabase with proper schema mapping
+      const { data, error } = await supabase
+        .from('channels')
+        .insert({
+          name: newChannel.name,
+          niche: newChannel.niche,
+          subscribers: newChannel.subscribers,
+          avatar: newChannel.avatar,
+          style_memory: newChannel.styleMemory || [],
+          default_prompt_enhancers: newChannel.defaultPromptEnhancers || '',
+          branding: newChannel.branding || {},
+          goals: newChannel.goals || {},
+          audience: newChannel.audience || {},
+          user_id: currentUser.id,
+        })
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Failed to create channel:', error);
-      return;
+      if (error) {
+        console.error('Failed to create channel:', error);
+        alert(`Failed to create channel: ${error.message}`);
+        return;
+      }
+
+      console.log('Channel created successfully:', data);
+
+      // Refetch channels from Supabase to ensure sync
+      await refetchChannels();
+
+      // Set as active
+      if (data?.id) {
+        setActiveChannelId(data.id);
+      }
+    } catch (e) {
+      console.error('Channel creation error:', e);
+      alert('An error occurred while creating the channel');
     }
-
-    // Map returned data back to Channel type
-    const savedChannel: Channel = {
-      id: data.id,
-      name: data.name,
-      niche: data.niche as ChannelNiche,
-      subscribers: data.subscribers || 0,
-      avatar: data.avatar || '',
-      styleMemory: data.style_memory || [],
-      defaultPromptEnhancers: data.default_prompt_enhancers || '',
-      branding: data.branding || {},
-      goals: data.goals || {},
-      audience: data.audience || {},
-    };
-
-    setLocalChannels(prev => [...prev, savedChannel]);
-    setActiveChannelId(savedChannel.id);
   };
 
   const handleNewVideo = () => {
