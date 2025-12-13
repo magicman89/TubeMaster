@@ -12,7 +12,7 @@ const YOUTUBE_SCOPES = [
     'https://www.googleapis.com/auth/yt-analytics.readonly',
 ].join(' ');
 
-const REDIRECT_URI = `${window.location.origin}/auth/youtube/callback`;
+const REDIRECT_URI = `${window.location.origin}/`;
 const STORAGE_KEY = 'tubemaster_youtube_tokens';
 
 // Supabase Edge Function URLs
