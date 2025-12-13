@@ -22,58 +22,71 @@ export enum ChannelNiche {
 export type SocialPlatform = 'YOUTUBE' | 'TIKTOK' | 'INSTAGRAM' | 'TWITTER' | 'LINKEDIN';
 
 export interface SocialPost {
-    platform: SocialPlatform;
-    content: string;
-    hashtags: string[];
-    scheduledTime?: string; // e.g. "10:00 AM"
+  platform: SocialPlatform;
+  content: string;
+  hashtags: string[];
+  scheduledTime?: string; // e.g. "10:00 AM"
 }
 
 export interface AutopilotConfig {
-    platforms: SocialPlatform[];
-    source: 'trending' | 'evergreen' | 'news';
-    autoSchedule: boolean;
-    platformSettings: {
-        [key in SocialPlatform]?: {
-            frequency: 'daily' | 'weekly' | 'bi-weekly';
-            tone: string;
-            postTime: string;
-        }
+  platforms: SocialPlatform[];
+  source: 'trending' | 'evergreen' | 'news';
+  autoSchedule: boolean;
+  platformSettings: {
+    [key in SocialPlatform]?: {
+      frequency: 'daily' | 'weekly' | 'bi-weekly';
+      tone: string;
+      postTime: string;
     }
+  }
 }
 
 export interface AutopilotConfigRow {
-    id?: string;
-    channel_id: string;
-    enabled: boolean;
-    platforms: string[]; // TEXT[] in DB
-    source: string;
-    auto_schedule: boolean;
-    frequency: string;
-    content_mix?: any;
-    publish_times?: string[];
-    approval_workflow?: string;
-    platform_settings?: any;
-    created_at?: string;
-    updated_at?: string;
+  id?: string;
+  channel_id: string;
+  enabled: boolean;
+  platforms: string[]; // TEXT[] in DB
+  source: string;
+  auto_schedule: boolean;
+  frequency: string;
+  content_mix?: any;
+  publish_times?: string[];
+  approval_workflow?: string;
+  platform_settings?: any;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// User-level preferences stored in Supabase for persistence
+export interface UserPreferences {
+  id?: string;
+  user_id?: string;
+  resolution: '720p' | '1080p' | '4k';
+  aspect_ratio: '16:9' | '9:16' | '1:1';
+  ai_persona: string;
+  voice: string;
+  theme?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ChannelBranding {
-    primaryColor: string;
-    secondaryColor: string;
-    slogan?: string;
-    logoUrl?: string;
+  primaryColor: string;
+  secondaryColor: string;
+  slogan?: string;
+  logoUrl?: string;
 }
 
 export interface ChannelGoals {
-    subscriberTarget: number;
-    uploadFrequency: 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
-    revenueTarget?: number;
+  subscriberTarget: number;
+  uploadFrequency: 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
+  revenueTarget?: number;
 }
 
 export interface ChannelAudience {
-    ageGroup: string;
-    genderSplit: string;
-    topLocations: string[];
+  ageGroup: string;
+  genderSplit: string;
+  topLocations: string[];
 }
 
 export interface Channel {
@@ -97,11 +110,11 @@ export interface ResearchResult {
 }
 
 export interface CompetitorAnalysis {
-    strengths: string[];
-    weaknesses: string[];
-    opportunities: string[];
-    brandArchetype: string;
-    threatScore: number; // 0-100
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
+  brandArchetype: string;
+  threatScore: number; // 0-100
 }
 
 export interface AudioSegment {
@@ -161,18 +174,18 @@ export interface SchedulerItem {
 }
 
 export interface Idea {
-    id: string;
-    content: string;
-    type: 'hook' | 'visual' | 'title' | 'random';
-    createdAt: Date;
-    tags: string[];
+  id: string;
+  content: string;
+  type: 'hook' | 'visual' | 'title' | 'random';
+  createdAt: Date;
+  tags: string[];
 }
 
 export interface ABTestResult {
-    winner: 'A' | 'B';
-    confidence: number; // 0-100
-    reasoning: string;
-    suggestion: string;
+  winner: 'A' | 'B';
+  confidence: number; // 0-100
+  reasoning: string;
+  suggestion: string;
 }
 
 // Autopilot Types

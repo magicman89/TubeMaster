@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Save, RefreshCw, Smartphone, Monitor, Mic2, User, Database, Radio, Youtube, Key, Palette, Target, Users, Hash, Layout, Plus, X, Image as ImageIcon, Upload, Sparkles, Link2, BrainCircuit, Wand2, Layers, Copy, Check, DollarSign, Zap, Music } from 'lucide-react';
-import { Channel, ChannelNiche, AutopilotConfigRow, StylePreset, DEFAULT_STYLE_PRESETS } from '../types';
+import { Settings, Save, RefreshCw, Smartphone, Monitor, Mic2, User, Database, Radio, Youtube, Key, Palette, Target, Users, Hash, Layout, Plus, X, Image as ImageIcon, Upload, Sparkles, Link2, BrainCircuit, Wand2, Layers, Copy, Check, DollarSign, Zap, Music, Loader2 } from 'lucide-react';
+import { Channel, ChannelNiche, AutopilotConfigRow, StylePreset, DEFAULT_STYLE_PRESETS, UserPreferences } from '../types';
 import { useToast } from './ToastContext';
+import { useAuth } from '../hooks/useSupabase';
 import YouTubeConnect from './YouTubeConnect';
 import { supabase } from '../services/supabase';
+import { userPreferencesService } from '../services/database/userPreferences';
 
 // Style Preset Card Component
 const StylePresetCard: React.FC<{
@@ -16,8 +18,8 @@ const StylePresetCard: React.FC<{
     <div
         onClick={onSelect}
         className={`relative p-4 rounded-xl border cursor-pointer transition-all ${isActive
-                ? 'border-purple-500 bg-purple-500/10 ring-2 ring-purple-500/30'
-                : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
+            ? 'border-purple-500 bg-purple-500/10 ring-2 ring-purple-500/30'
+            : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
             }`}
     >
         {/* Color Preview */}
@@ -73,12 +75,16 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
     const [activeTab, setActiveTab] = useState<'SYSTEM' | 'CHANNEL'>('CHANNEL');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // System State
+    // Auth for user preferences
+    const { user } = useAuth();
+
+    // System State - persisted to Supabase
     const [apiKey, setApiKey] = useState('**********************');
-    const [resolution, setResolution] = useState('720p');
-    const [aspectRatio, setAspectRatio] = useState('16:9');
+    const [resolution, setResolution] = useState<'720p' | '1080p' | '4k'>('720p');
+    const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
     const [aiPersona, setAiPersona] = useState('Professional');
     const [voice, setVoice] = useState('Fenrir');
+    const [preferencesLoading, setPreferencesLoading] = useState(true);
 
     // Channel State (Form)
     const [channelForm, setChannelForm] = useState<Channel | null>(null);
@@ -93,6 +99,32 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
     const [outputFormats, setOutputFormats] = useState<string[]>(['16:9']);
 
     const [isSaved, setIsSaved] = useState(false);
+
+    // Load user preferences from Supabase on mount
+    useEffect(() => {
+        const loadPreferences = async () => {
+            if (!user?.id) {
+                setPreferencesLoading(false);
+                return;
+            }
+
+            try {
+                const prefs = await userPreferencesService.get(user.id);
+                if (prefs) {
+                    setResolution(prefs.resolution || '720p');
+                    setAspectRatio(prefs.aspect_ratio || '16:9');
+                    setAiPersona(prefs.ai_persona || 'Professional');
+                    setVoice(prefs.voice || 'Fenrir');
+                }
+            } catch (e) {
+                console.error('Failed to load preferences:', e);
+            } finally {
+                setPreferencesLoading(false);
+            }
+        };
+
+        loadPreferences();
+    }, [user?.id]);
 
     useEffect(() => {
         if (activeChannel) {
@@ -176,6 +208,16 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
         setIsSaved(true);
 
         try {
+            // Save System Preferences to Supabase
+            if (activeTab === 'SYSTEM' && user?.id) {
+                await userPreferencesService.upsert(user.id, {
+                    resolution,
+                    aspect_ratio: aspectRatio,
+                    ai_persona: aiPersona,
+                    voice
+                });
+            }
+
             // Save Channel
             if (activeTab === 'CHANNEL' && channelForm && onUpdateChannel) {
                 onUpdateChannel(channelForm);
@@ -851,8 +893,8 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                                     prev.includes('16:9') ? prev.filter(f => f !== '16:9') : [...prev, '16:9']
                                                 )}
                                                 className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${outputFormats.includes('16:9')
-                                                        ? 'bg-orange-600 text-white border-orange-500'
-                                                        : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
+                                                    ? 'bg-orange-600 text-white border-orange-500'
+                                                    : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
                                                     }`}
                                             >
                                                 <Monitor className="w-4 h-4" /> 16:9
@@ -862,8 +904,8 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                                     prev.includes('9:16') ? prev.filter(f => f !== '9:16') : [...prev, '9:16']
                                                 )}
                                                 className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${outputFormats.includes('9:16')
-                                                        ? 'bg-orange-600 text-white border-orange-500'
-                                                        : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
+                                                    ? 'bg-orange-600 text-white border-orange-500'
+                                                    : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
                                                     }`}
                                             >
                                                 <Smartphone className="w-4 h-4" /> 9:16
@@ -873,8 +915,8 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                                     prev.includes('1:1') ? prev.filter(f => f !== '1:1') : [...prev, '1:1']
                                                 )}
                                                 className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${outputFormats.includes('1:1')
-                                                        ? 'bg-orange-600 text-white border-orange-500'
-                                                        : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
+                                                    ? 'bg-orange-600 text-white border-orange-500'
+                                                    : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
                                                     }`}
                                             >
                                                 <Hash className="w-4 h-4" /> 1:1

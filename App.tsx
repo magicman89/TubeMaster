@@ -175,8 +175,34 @@ const AppContent: React.FC = () => {
   const channels = localChannels;
   const activeChannel = channels.find(c => c.id === activeChannelId) || channels[0];
 
-  const handleUpdateChannel = (updated: Channel) => {
+  const handleUpdateChannel = async (updated: Channel) => {
+    // Update local state immediately for responsive UI
     setLocalChannels(prev => prev.map(c => c.id === updated.id ? updated : c));
+
+    // Persist to Supabase
+    try {
+      const { error } = await supabase
+        .from('channels')
+        .update({
+          name: updated.name,
+          niche: updated.niche,
+          subscribers: updated.subscribers,
+          avatar: updated.avatar,
+          style_memory: updated.styleMemory || [],
+          default_prompt_enhancers: updated.defaultPromptEnhancers || '',
+          branding: updated.branding || {},
+          goals: updated.goals || {},
+          audience: updated.audience || {},
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', updated.id);
+
+      if (error) {
+        console.error('Failed to update channel in Supabase:', error);
+      }
+    } catch (e) {
+      console.error('Channel update error:', e);
+    }
   };
 
   const handleAddChannel = async (newChannel: Channel) => {
