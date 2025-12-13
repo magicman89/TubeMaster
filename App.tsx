@@ -11,7 +11,7 @@ import { AuthProvider, useAuth, useSupabaseQuery } from './hooks/useSupabase';
 import { supabase } from './services/supabase';
 import AuthModal from './components/AuthModal';
 import { View, Channel, Idea, ChannelNiche } from './types';
-import { ChevronDown, Plus, Sparkles, LogIn, User, X, Upload, Loader2, AlertTriangle, RefreshCcw, LogOut } from 'lucide-react';
+import { ChevronDown, Plus, Sparkles, LogIn, User, X, Upload, Loader2, AlertTriangle, RefreshCcw, LogOut, WifiOff } from 'lucide-react';
 
 // Debug Component
 const LoadingDebug: React.FC<{
@@ -75,6 +75,32 @@ const LoadingDebug: React.FC<{
     </div>
   );
 };
+
+// Error Banner Component
+const ErrorBanner: React.FC<{ error: Error; onRetry?: () => void }> = ({ error, onRetry }) => (
+  <div className="fixed top-4 right-4 z-50 max-w-sm w-full animate-slide-in-right">
+    <div className="glass-panel p-4 rounded-xl border border-red-500/30 bg-red-500/10 shadow-lg shadow-red-500/10">
+      <div className="flex items-start gap-3">
+        <WifiOff className="w-5 h-5 text-red-400 mt-0.5" />
+        <div className="flex-1">
+          <h3 className="text-sm font-bold text-red-200">Connection Error</h3>
+          <p className="text-xs text-red-300/80 mt-1">{error.message}</p>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="mt-2 text-xs font-bold text-red-400 hover:text-red-300 underline"
+            >
+              Retry Connection
+            </button>
+          )}
+        </div>
+        <button onClick={() => window.location.reload()} className="p-1 hover:bg-red-500/20 rounded">
+          <RefreshCcw className="w-4 h-4 text-red-400" />
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 // Add New Channel Modal Component
 const AddChannelModal: React.FC<{
@@ -212,13 +238,19 @@ const AddChannelModal: React.FC<{
 
 const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, error: authError } = useAuth();
 
   // Debug override state
   const [bypassLoading, setBypassLoading] = useState(false);
 
   // Load channels from Supabase
-  const { data: supabaseChannels, loading: channelsLoading, refetch: refetchChannels } = useSupabaseQuery<Channel>('channels');
+  const {
+    data: supabaseChannels,
+    loading: channelsLoading,
+    error: channelsError,
+    refetch: refetchChannels
+  } = useSupabaseQuery<Channel>('channels');
+
   const [localChannels, setLocalChannels] = useState<Channel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string>('');
   const [isChannelMenuOpen, setIsChannelMenuOpen] = useState(false);
@@ -382,17 +414,22 @@ const AppContent: React.FC = () => {
   // Show auth screen if not logged in
   if (!user && !bypassLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#030014]">
+      <div className="flex h-screen items-center justify-center bg-[#030014] relative">
         <div className="fixed inset-0 bg-grid-pattern z-0 opacity-50 pointer-events-none"></div>
         <div className="sym-bg"></div>
         <div className="sym-bg-2"></div>
+        {/* Show error banner if auth failed/timed out */}
+        {authError && <ErrorBanner error={authError} onRetry={() => window.location.reload()} />}
         <AuthModal isOpen={true} onClose={() => { }} onSuccess={() => { }} />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen text-slate-200 overflow-hidden font-sans bg-[#030014]">
+    <div className="flex h-screen text-slate-200 overflow-hidden font-sans bg-[#030014] relative">
+      {/* Global Error Banner for Channel Fetching */}
+      {channelsError && <ErrorBanner error={channelsError} onRetry={refetchChannels} />}
+
       {/* Dynamic Background System */}
       <div className="fixed inset-0 bg-grid-pattern z-0 opacity-50 pointer-events-none"></div>
       <div className="sym-bg"></div>
@@ -408,20 +445,46 @@ const AppContent: React.FC = () => {
           />
         </div>
       ) : channels.length === 0 && !bypassLoading ? (
-        /* Empty State - No Channels Yet */
+        /* Empty State - No Channels Yet (or Failed Fetch) */
         <div className="flex-1 flex items-center justify-center relative z-20">
           <div className="text-center space-y-6 max-w-md">
-            <div className="w-24 h-24 mx-auto bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl flex items-center justify-center">
-              <Plus className="w-12 h-12 text-white" />
-            </div>
-            <h2 className="text-2xl font-bold text-white">Welcome to TubeMaster</h2>
-            <p className="text-slate-400">Create your first channel to get started with AI-powered video creation.</p>
-            <button
-              onClick={() => setIsAddChannelModalOpen(true)}
-              className="px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(124,58,237,0.3)] hover:shadow-[0_0_30px_rgba(124,58,237,0.5)] transition-all"
-            >
-              Create Your First Channel
-            </button>
+            {channelsError ? (
+               // Error State Replacement for Empty State
+               <div className="w-24 h-24 mx-auto bg-red-500/10 rounded-2xl flex items-center justify-center border border-red-500/20">
+                 <WifiOff className="w-12 h-12 text-red-500" />
+               </div>
+            ) : (
+               <div className="w-24 h-24 mx-auto bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl flex items-center justify-center">
+                 <Plus className="w-12 h-12 text-white" />
+               </div>
+            )}
+
+            <h2 className="text-2xl font-bold text-white">
+              {channelsError ? "Unable to Connect" : "Welcome to TubeMaster"}
+            </h2>
+
+            <p className="text-slate-400">
+              {channelsError
+                ? "We couldn't load your channels. Please check your connection or try again."
+                : "Create your first channel to get started with AI-powered video creation."
+              }
+            </p>
+
+            {channelsError ? (
+               <button
+                  onClick={() => window.location.reload()}
+                  className="px-8 py-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 rounded-xl font-bold text-red-200 transition-all flex items-center gap-2 mx-auto"
+               >
+                 <RefreshCcw className="w-4 h-4" /> Try Again
+               </button>
+            ) : (
+               <button
+                 onClick={() => setIsAddChannelModalOpen(true)}
+                 className="px-8 py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl font-bold text-white shadow-[0_0_20px_rgba(124,58,237,0.3)] hover:shadow-[0_0_30px_rgba(124,58,237,0.5)] transition-all"
+               >
+                 Create Your First Channel
+               </button>
+            )}
           </div>
           <AddChannelModal
             isOpen={isAddChannelModalOpen}
