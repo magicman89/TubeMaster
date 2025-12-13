@@ -5,7 +5,7 @@ interface AuthContextType {
     user: User | null;
     session: Session | null;
     loading: boolean;
-    error: Error | null; // Added error state
+    error: Error | null;
     isEnabled: boolean;
     signIn: (email: string, password: string) => Promise<void>;
     signUp: (email: string, password: string) => Promise<void>;
@@ -13,6 +13,23 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+// Retry helper function
+async function withRetry<T>(
+    operation: () => Promise<T>,
+    retries = 3,
+    delay = 1000,
+    backoff = 2
+): Promise<T> {
+    try {
+        return await operation();
+    } catch (error) {
+        if (retries <= 0) throw error;
+
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return withRetry(operation, retries - 1, delay * backoff, backoff);
+    }
+}
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
@@ -37,23 +54,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     window.history.replaceState(null, '', window.location.pathname);
                 }
 
-                // Get session with timeout to prevent hanging
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Auth initialization timed out')), 5000)
-                );
+                // Get session with timeout and retry
+                // 10s timeout per attempt
+                const getSessionWithTimeout = () => {
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Auth attempt timed out')), 10000)
+                    );
+                    return Promise.race([
+                        supabase.auth.getSession(),
+                        timeoutPromise
+                    ]) as Promise<{ data: { session: Session | null } }>;
+                };
 
-                const { data } = await Promise.race([
-                    supabase.auth.getSession(),
-                    timeoutPromise
-                ]) as { data: { session: Session | null } };
+                const { data } = await withRetry(getSessionWithTimeout);
 
                 if (data?.session) {
                     setSession(data.session);
                     setUser(data.session.user);
                 }
             } catch (e) {
-                console.warn('Auth initialization warning (proceeding to app):', e);
-                setError(e as Error); // Capture error
+                console.warn('Auth initialization failed after retries:', e);
+                setError(e as Error);
             } finally {
                 // Always stop loading regardless of success/failure
                 setLoading(false);
@@ -146,34 +167,41 @@ export function useSupabaseQuery<T>(
         }
 
         setLoading(true);
-        setError(null); // Clear previous errors
+        setError(null);
         try {
-            let query = supabase.from(tableName).select('*');
+            // Define the query operation
+            const performQuery = async () => {
+                let query = supabase.from(tableName).select('*');
 
-            if (options?.filter) {
-                query = query.eq(options.filter.column, options.filter.value);
-            }
-            if (options?.orderBy) {
-                query = query.order(options.orderBy.column, { ascending: options.orderBy.ascending ?? true });
-            }
-            if (options?.limit) {
-                query = query.limit(options.limit);
-            }
+                if (options?.filter) {
+                    query = query.eq(options.filter.column, options.filter.value);
+                }
+                if (options?.orderBy) {
+                    query = query.order(options.orderBy.column, { ascending: options.orderBy.ascending ?? true });
+                }
+                if (options?.limit) {
+                    query = query.limit(options.limit);
+                }
 
-            // Add timeout to query
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Data fetch timed out')), 10000)
-            );
+                // 15s timeout
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Data fetch attempt timed out')), 15000)
+                );
 
-            const { data: result, error: queryError } = await Promise.race([
-                query,
-                timeoutPromise
-            ]) as { data: T[] | null, error: any };
+                const { data: result, error: queryError } = await Promise.race([
+                    query,
+                    timeoutPromise
+                ]) as { data: T[] | null, error: any };
 
-            if (queryError) throw queryError;
-            setData(result as T[] || []);
+                if (queryError) throw queryError;
+                return result as T[];
+            };
+
+            // Execute with retry
+            const result = await withRetry(performQuery);
+            setData(result || []);
         } catch (e) {
-            console.error(`Error fetching ${tableName}:`, e);
+            console.error(`Error fetching ${tableName} after retries:`, e);
             setError(e as Error);
         } finally {
             setLoading(false);
