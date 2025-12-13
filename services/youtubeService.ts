@@ -2,7 +2,7 @@
 // Handles OAuth2 authentication and YouTube channel/video operations
 // Supports persistent token storage via Supabase
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { supabase, hasSupabaseCredentials } from './supabase';
 
 const YOUTUBE_CLIENT_ID = import.meta.env.VITE_YOUTUBE_CLIENT_ID;
 const YOUTUBE_SCOPES = [
@@ -16,17 +16,11 @@ const REDIRECT_URI = `${window.location.origin}/`;
 const STORAGE_KEY = 'tubemaster_youtube_tokens';
 
 // Supabase Edge Function URLs
-const getEdgeFunctionUrl = (name: string) => {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    return supabaseUrl ? `${supabaseUrl}/functions/v1/${name}` : null;
-};
-
-// Supabase client for token persistence
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase: SupabaseClient | null = supabaseUrl && supabaseKey
-    ? createClient(supabaseUrl, supabaseKey)
-    : null;
+const getEdgeFunctionUrl = (name: string) => {
+    return supabaseUrl ? `${supabaseUrl}/functions/v1/${name}` : null;
+};
 
 export interface YouTubeChannel {
     id: string;
@@ -313,7 +307,7 @@ export const youtubeService = {
         youtubeChannelId?: string,
         youtubeChannelTitle?: string
     ): Promise<void> {
-        if (!supabase) return;
+        if (!hasSupabaseCredentials) return;
 
         try {
             await supabase
@@ -333,7 +327,7 @@ export const youtubeService = {
 
     // Load token from Supabase (call on app init)
     async loadTokenFromSupabase(channelId: string): Promise<boolean> {
-        if (!supabase) return false;
+        if (!hasSupabaseCredentials) return false;
 
         try {
             const { data, error } = await supabase
@@ -391,7 +385,7 @@ export const youtubeService = {
         saveTokensToStorage();
 
         // Also clear from Supabase
-        if (supabase) {
+        if (hasSupabaseCredentials) {
             supabase
                 .from('channels')
                 .update({
