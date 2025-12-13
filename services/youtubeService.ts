@@ -228,7 +228,10 @@ export const youtubeService = {
         try {
             const response = await fetch(edgeFunctionUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': supabaseKey || '',
+                },
                 body: JSON.stringify({
                     code,
                     channelId,

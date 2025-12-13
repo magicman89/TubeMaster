@@ -41,7 +41,7 @@ serve(async (req) => {
                 code,
                 client_id: Deno.env.get('YOUTUBE_CLIENT_ID') || '',
                 client_secret: Deno.env.get('YOUTUBE_CLIENT_SECRET') || '',
-                redirect_uri: redirectUri || `${req.headers.get('origin')}/auth/youtube/callback`,
+                redirect_uri: redirectUri || `${req.headers.get('origin')}/`,
                 grant_type: 'authorization_code',
             }),
         });
