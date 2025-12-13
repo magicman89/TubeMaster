@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Youtube, Loader2, CheckCircle2, Link2, ExternalLink, AlertCircle, X, RefreshCw, BarChart3, Video, Users } from 'lucide-react';
+import { Youtube, Loader2, CheckCircle2, Link2, ExternalLink, AlertCircle, X, RefreshCw, BarChart3, Video, Users, LogIn } from 'lucide-react';
 import { youtubeService, YouTubeChannel } from '../services/youtubeService';
 import { useToast } from './ToastContext';
+import { useAuth } from '../hooks/useSupabase';
 
 interface YouTubeConnectProps {
     channelId: string; // Our internal channel ID
@@ -9,6 +10,7 @@ interface YouTubeConnectProps {
 }
 
 const YouTubeConnect: React.FC<YouTubeConnectProps> = ({ channelId, onConnected }) => {
+    const { user } = useAuth(); // Check for authenticated user
     const [isConnecting, setIsConnecting] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [connectedChannel, setConnectedChannel] = useState<YouTubeChannel | null>(null);
@@ -95,6 +97,11 @@ const YouTubeConnect: React.FC<YouTubeConnectProps> = ({ channelId, onConnected 
     }, [channelId]);
 
     const handleConnect = () => {
+        if (!user) {
+            showToast('Please log in first to connect YouTube.', 'error');
+            return;
+        }
+
         // Pass channelId so the callback knows which channel to associate
         const authUrl = youtubeService.getAuthUrl(channelId);
         window.location.href = authUrl;
@@ -237,6 +244,14 @@ const YouTubeConnect: React.FC<YouTubeConnectProps> = ({ channelId, onConnected 
                     </>
                 )}
             </button>
+
+            {/* Warning if trying to connect without being logged in (via bypass) */}
+            {!user && (
+                <div className="flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-400 text-xs">
+                    <LogIn className="w-3 h-3 flex-shrink-0" />
+                    Sign in required to link account
+                </div>
+            )}
         </div>
     );
 };

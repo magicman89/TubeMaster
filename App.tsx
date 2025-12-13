@@ -47,7 +47,7 @@ const LoadingDebug: React.FC<{
         </div>
 
         {/* Rescue Actions */}
-        {elapsed > 5 && (
+        {elapsed > 3 && (
           <div className="space-y-3 w-full animate-fade-in">
              <div className="flex items-center gap-2 text-yellow-500 bg-yellow-500/10 p-3 rounded-lg text-sm">
                 <AlertTriangle className="w-4 h-4" />
@@ -435,8 +435,8 @@ const AppContent: React.FC = () => {
       <div className="sym-bg"></div>
       <div className="sym-bg-2"></div>
 
-      {channelsLoading && !bypassLoading ? (
-        /* Loading State */
+      {channelsLoading && channels.length === 0 && !bypassLoading ? (
+        /* Loading State - ONLY if no channels yet */
         <div className="flex-1 flex items-center justify-center relative z-20">
           <LoadingDebug
             message="Loading Channels..."
@@ -575,6 +575,15 @@ const AppContent: React.FC = () => {
 
             {/* Main Content Area */}
             <div className="flex-1 overflow-auto px-4 pb-4 md:px-8 md:pb-8">
+              {/* Show loading overlay if channels are loading but we have some already (optimistic) OR if refetching */}
+              {channelsLoading && channels.length > 0 && (
+                 <div className="absolute top-20 right-8 z-50">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 text-blue-300 rounded-full text-xs border border-blue-500/30">
+                       <Loader2 className="w-3 h-3 animate-spin" />
+                       Refreshing Channels...
+                    </div>
+                 </div>
+              )}
               {renderView()}
             </div>
           </main>

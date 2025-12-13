@@ -17,9 +17,9 @@ const AuthContext = createContext<AuthContextType | null>(null);
 // Retry helper function
 async function withRetry<T>(
     operation: () => Promise<T>,
-    retries = 3,
+    retries = 2, // Reduced from 3
     delay = 1000,
-    backoff = 2
+    backoff = 1.5 // Reduced backoff
 ): Promise<T> {
     try {
         return await operation();
@@ -55,10 +55,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 }
 
                 // Get session with timeout and retry
-                // 10s timeout per attempt
+                // Reduced timeout to 3s for faster feedback
                 const getSessionWithTimeout = () => {
                     const timeoutPromise = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('Auth attempt timed out')), 10000)
+                        setTimeout(() => reject(new Error('Auth attempt timed out')), 3000)
                     );
                     return Promise.race([
                         supabase.auth.getSession(),
@@ -183,9 +183,9 @@ export function useSupabaseQuery<T>(
                     query = query.limit(options.limit);
                 }
 
-                // 15s timeout
+                // Reduced timeout to 5s for faster feedback
                 const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Data fetch attempt timed out')), 15000)
+                    setTimeout(() => reject(new Error('Data fetch attempt timed out')), 5000)
                 );
 
                 const { data: result, error: queryError } = await Promise.race([
