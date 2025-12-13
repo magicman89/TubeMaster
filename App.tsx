@@ -11,7 +11,70 @@ import { AuthProvider, useAuth, useSupabaseQuery } from './hooks/useSupabase';
 import { supabase } from './services/supabase';
 import AuthModal from './components/AuthModal';
 import { View, Channel, Idea, ChannelNiche } from './types';
-import { ChevronDown, Plus, Sparkles, LogIn, User, X, Upload, Loader2 } from 'lucide-react';
+import { ChevronDown, Plus, Sparkles, LogIn, User, X, Upload, Loader2, AlertTriangle, RefreshCcw, LogOut } from 'lucide-react';
+
+// Debug Component
+const LoadingDebug: React.FC<{
+  message: string;
+  details?: Record<string, any>;
+  onForceContinue?: () => void;
+}> = ({ message, details, onForceContinue }) => {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setElapsed(e => e + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="flex h-screen items-center justify-center bg-[#030014]">
+      <div className="flex flex-col items-center gap-6 max-w-md w-full p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
+        <Loader2 className="w-12 h-12 animate-spin text-purple-500" />
+        <p className="text-xl font-bold text-white">{message}</p>
+
+        {/* Debug Info */}
+        <div className="w-full bg-black/50 p-4 rounded-xl border border-white/5 font-mono text-xs text-slate-400 space-y-2">
+           <div className="flex justify-between border-b border-white/5 pb-2">
+             <span>Time Elapsed:</span>
+             <span className={elapsed > 5 ? 'text-yellow-400' : 'text-green-400'}>{elapsed}s</span>
+           </div>
+           {details && Object.entries(details).map(([k, v]) => (
+             <div key={k} className="flex justify-between">
+               <span>{k}:</span>
+               <span className="text-blue-300">{String(v)}</span>
+             </div>
+           ))}
+        </div>
+
+        {/* Rescue Actions */}
+        {elapsed > 5 && (
+          <div className="space-y-3 w-full animate-fade-in">
+             <div className="flex items-center gap-2 text-yellow-500 bg-yellow-500/10 p-3 rounded-lg text-sm">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Taking longer than expected...</span>
+             </div>
+             {onForceContinue && (
+               <button
+                 onClick={onForceContinue}
+                 className="w-full py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/50 rounded-lg flex items-center justify-center gap-2 transition-all"
+               >
+                 <LogOut className="w-4 h-4" />
+                 Force Bypass (Debug)
+               </button>
+             )}
+             <button
+                 onClick={() => window.location.reload()}
+                 className="w-full py-2 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-lg flex items-center justify-center gap-2 transition-all"
+               >
+                 <RefreshCcw className="w-4 h-4" />
+                 Reload Page
+             </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // Add New Channel Modal Component
 const AddChannelModal: React.FC<{
@@ -150,6 +213,9 @@ const AddChannelModal: React.FC<{
 const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   const { user, loading: authLoading } = useAuth();
+
+  // Debug override state
+  const [bypassLoading, setBypassLoading] = useState(false);
 
   // Load channels from Supabase
   const { data: supabaseChannels, loading: channelsLoading, refetch: refetchChannels } = useSupabaseQuery<Channel>('channels');
@@ -303,19 +369,18 @@ const AppContent: React.FC = () => {
   };
 
   // Show loading state while checking auth
-  if (authLoading) {
+  if (authLoading && !bypassLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#030014]">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-12 h-12 animate-spin text-purple-500" />
-          <p className="text-slate-400">Loading...</p>
-        </div>
-      </div>
+      <LoadingDebug
+        message="Initializing Authentication..."
+        details={{ authLoading, user: user ? 'Found' : 'Null' }}
+        onForceContinue={() => setBypassLoading(true)}
+      />
     );
   }
 
   // Show auth screen if not logged in
-  if (!user) {
+  if (!user && !bypassLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#030014]">
         <div className="fixed inset-0 bg-grid-pattern z-0 opacity-50 pointer-events-none"></div>
@@ -333,17 +398,18 @@ const AppContent: React.FC = () => {
       <div className="sym-bg"></div>
       <div className="sym-bg-2"></div>
 
-      {channelsLoading ? (
+      {channelsLoading && !bypassLoading ? (
         /* Loading State */
-        <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="w-12 h-12 animate-spin text-purple-500" />
-            <p className="text-slate-400">Loading channels...</p>
-          </div>
+        <div className="flex-1 flex items-center justify-center relative z-20">
+          <LoadingDebug
+            message="Loading Channels..."
+            details={{ channelsLoading, count: channels.length, userEmail: user?.email }}
+            onForceContinue={() => setBypassLoading(true)}
+          />
         </div>
-      ) : channels.length === 0 ? (
+      ) : channels.length === 0 && !bypassLoading ? (
         /* Empty State - No Channels Yet */
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center relative z-20">
           <div className="text-center space-y-6 max-w-md">
             <div className="w-24 h-24 mx-auto bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl flex items-center justify-center">
               <Plus className="w-12 h-12 text-white" />
