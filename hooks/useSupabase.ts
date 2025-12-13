@@ -25,49 +25,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return;
         }
 
-        // Handle email confirmation redirect (hash contains access_token)
-        const handleHashToken = async () => {
-            const hash = window.location.hash;
-            if (hash && hash.includes('access_token')) {
-                // Supabase will automatically detect and process the hash token
-                // when we call getSession(). After processing, clear the hash from URL.
-                try {
-                    const { data, error } = await supabase.auth.getSession();
-                    if (data?.session) {
-                        setSession(data.session);
-                        setUser(data.session.user);
-                        // Clear the hash from URL for cleaner UX
-                        window.history.replaceState(null, '', window.location.pathname);
-                    }
-                    if (error) {
-                        console.error('Auth hash processing error:', error);
-                    }
-                } catch (e) {
-                    console.error('Failed to process auth hash:', e);
+        // Initialize auth
+        const initAuth = async () => {
+            try {
+                // Check for hash token from email confirmation
+                const hash = window.location.hash;
+                if (hash && hash.includes('access_token')) {
+                    // Clear hash from URL first for cleaner UX
+                    window.history.replaceState(null, '', window.location.pathname);
                 }
+
+                // Get session (Supabase client handles hash tokens automatically)
+                const { data } = await supabase.auth.getSession();
+                if (data?.session) {
+                    setSession(data.session);
+                    setUser(data.session.user);
+                }
+            } catch (e) {
+                console.error('Auth initialization error:', e);
+            } finally {
+                // Always stop loading regardless of success/failure
                 setLoading(false);
-                return true; // Hash was processed
             }
-            return false;
         };
 
-        // First check if there's a hash token to process
-        handleHashToken().then((processed) => {
-            if (processed) return; // Already handled
-
-            // Otherwise get initial session normally
-            getSession()
-                .then((sess) => {
-                    setSession(sess);
-                    if (sess) {
-                        getUser().then(setUser);
-                    }
-                    setLoading(false);
-                })
-                .catch(() => {
-                    setLoading(false);
-                });
-        });
+        initAuth();
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
