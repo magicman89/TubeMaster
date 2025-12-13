@@ -5,7 +5,7 @@
             "headers": [
                 {
                     "key": "Content-Security-Policy",
-                    "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://deno.land https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: data: https: http:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://youtube.googleapis.com https://fonts.googleapis.com https://fonts.gstatic.com; frame-src https://accounts.google.com; media-src 'self' blob: https:;"
+                    "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh https://deno.land https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: data: https: http:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://youtube.googleapis.com https://fonts.googleapis.com https://fonts.gstatic.com; frame-src https://accounts.google.com; media-src 'self' blob: https:;"
                 }
             ]
         }
