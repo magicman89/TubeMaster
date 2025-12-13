@@ -15,25 +15,24 @@ const StylePresetCard: React.FC<{
 }> = ({ preset, isActive, onSelect, onApply }) => (
     <div
         onClick={onSelect}
-        className={`relative p-4 rounded-xl border cursor-pointer transition-all ${
-            isActive
+        className={`relative p-4 rounded-xl border cursor-pointer transition-all ${isActive
                 ? 'border-purple-500 bg-purple-500/10 ring-2 ring-purple-500/30'
                 : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
-        }`}
+            }`}
     >
         {/* Color Preview */}
         <div className="flex gap-1 mb-3">
             <div
                 className="w-6 h-6 rounded-full border border-white/20"
-                style={{ backgroundColor: preset.colorPalette.primary }}
+                style={{ backgroundColor: preset.colorPalette?.primary || '#8b5cf6' }}
             />
             <div
                 className="w-6 h-6 rounded-full border border-white/20"
-                style={{ backgroundColor: preset.colorPalette.secondary }}
+                style={{ backgroundColor: preset.colorPalette?.secondary || '#ec4899' }}
             />
             <div
                 className="w-6 h-6 rounded-full border border-white/20"
-                style={{ backgroundColor: preset.colorPalette.accent }}
+                style={{ backgroundColor: preset.colorPalette?.accent || '#3b82f6' }}
             />
         </div>
 
@@ -41,7 +40,7 @@ const StylePresetCard: React.FC<{
         <p className="text-[10px] text-slate-400 line-clamp-2 mb-2">{preset.description}</p>
 
         <div className="flex flex-wrap gap-1 mb-3">
-            {preset.moodKeywords.slice(0, 3).map((mood, i) => (
+            {(preset.moodKeywords || []).slice(0, 3).map((mood, i) => (
                 <span key={i} className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-slate-400">
                     {mood}
                 </span>
@@ -135,8 +134,8 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
             defaultPromptEnhancers: preset.promptEnhancers,
             branding: {
                 ...channelForm.branding,
-                primaryColor: preset.colorPalette.primary,
-                secondaryColor: preset.colorPalette.secondary
+                primaryColor: preset.colorPalette?.primary || '#8b5cf6',
+                secondaryColor: preset.colorPalette?.secondary || '#ec4899'
             }
         });
 
@@ -158,15 +157,15 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
             if (data) {
                 setAutopilotConfig(data as AutopilotConfigRow);
             } else if (error && error.code === 'PGRST116') {
-                 // Not found, create default state for UI but don't save yet
-                 setAutopilotConfig({
+                // Not found, create default state for UI but don't save yet
+                setAutopilotConfig({
                     channel_id: channelId,
                     enabled: false,
                     frequency: 'weekly',
                     source: 'trending',
                     auto_schedule: true,
                     platforms: ['YOUTUBE']
-                 });
+                });
             }
         } catch (e) {
             console.error("Failed to fetch autopilot config", e);
@@ -493,7 +492,7 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                         <input
                                             type="checkbox"
                                             checked={autopilotConfig.enabled}
-                                            onChange={(e) => setAutopilotConfig({...autopilotConfig, enabled: e.target.checked})}
+                                            onChange={(e) => setAutopilotConfig({ ...autopilotConfig, enabled: e.target.checked })}
                                             className="sr-only peer"
                                         />
                                         <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
@@ -507,7 +506,7 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                                 <label className="text-xs font-bold text-slate-500 uppercase">Frequency</label>
                                                 <select
                                                     value={autopilotConfig.frequency}
-                                                    onChange={(e) => setAutopilotConfig({...autopilotConfig, frequency: e.target.value})}
+                                                    onChange={(e) => setAutopilotConfig({ ...autopilotConfig, frequency: e.target.value })}
                                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:border-purple-500 outline-none"
                                                 >
                                                     <option value="daily">Daily (~24h)</option>
@@ -520,7 +519,7 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                                 <label className="text-xs font-bold text-slate-500 uppercase">Source Mode</label>
                                                 <select
                                                     value={autopilotConfig.source}
-                                                    onChange={(e) => setAutopilotConfig({...autopilotConfig, source: e.target.value})}
+                                                    onChange={(e) => setAutopilotConfig({ ...autopilotConfig, source: e.target.value })}
                                                     className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:border-purple-500 outline-none"
                                                 >
                                                     <option value="trending">Viral Trends</option>
@@ -851,11 +850,10 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                                 onClick={() => setOutputFormats(prev =>
                                                     prev.includes('16:9') ? prev.filter(f => f !== '16:9') : [...prev, '16:9']
                                                 )}
-                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${
-                                                    outputFormats.includes('16:9')
+                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${outputFormats.includes('16:9')
                                                         ? 'bg-orange-600 text-white border-orange-500'
                                                         : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
-                                                }`}
+                                                    }`}
                                             >
                                                 <Monitor className="w-4 h-4" /> 16:9
                                             </button>
@@ -863,11 +861,10 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                                 onClick={() => setOutputFormats(prev =>
                                                     prev.includes('9:16') ? prev.filter(f => f !== '9:16') : [...prev, '9:16']
                                                 )}
-                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${
-                                                    outputFormats.includes('9:16')
+                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${outputFormats.includes('9:16')
                                                         ? 'bg-orange-600 text-white border-orange-500'
                                                         : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
-                                                }`}
+                                                    }`}
                                             >
                                                 <Smartphone className="w-4 h-4" /> 9:16
                                             </button>
@@ -875,11 +872,10 @@ const SettingsComponent: React.FC<SettingsProps> = ({ activeChannel, onUpdateCha
                                                 onClick={() => setOutputFormats(prev =>
                                                     prev.includes('1:1') ? prev.filter(f => f !== '1:1') : [...prev, '1:1']
                                                 )}
-                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${
-                                                    outputFormats.includes('1:1')
+                                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 border ${outputFormats.includes('1:1')
                                                         ? 'bg-orange-600 text-white border-orange-500'
                                                         : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
-                                                }`}
+                                                    }`}
                                             >
                                                 <Hash className="w-4 h-4" /> 1:1
                                             </button>
