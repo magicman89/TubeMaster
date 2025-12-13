@@ -8,6 +8,7 @@ import SettingsComponent from './components/Settings';
 import IdeaVault from './components/IdeaVault';
 import { ToastProvider } from './components/ToastContext';
 import { AuthProvider, useAuth, useSupabaseQuery } from './hooks/useSupabase';
+import { supabase } from './services/supabase';
 import AuthModal from './components/AuthModal';
 import { View, Channel, Idea, ChannelNiche } from './types';
 import { ChevronDown, Plus, Sparkles, LogIn, User, X, Upload, Loader2 } from 'lucide-react';
@@ -177,11 +178,53 @@ const App: React.FC = () => {
     setLocalChannels(prev => prev.map(c => c.id === updated.id ? updated : c));
   };
 
-  const handleAddChannel = (newChannel: Channel) => {
-    setLocalChannels(prev => [...prev, newChannel]);
-    setActiveChannelId(newChannel.id);
-    // Optionally refetch from Supabase to sync
-    refetchChannels();
+  const handleAddChannel = async (newChannel: Channel) => {
+    // Get current user for RLS
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.error('User not authenticated - cannot create channel');
+      return;
+    }
+
+    // Insert to Supabase with proper schema mapping
+    const { data, error } = await supabase
+      .from('channels')
+      .insert({
+        name: newChannel.name,
+        niche: newChannel.niche,
+        subscribers: newChannel.subscribers,
+        avatar: newChannel.avatar,
+        style_memory: newChannel.styleMemory || [],
+        default_prompt_enhancers: newChannel.defaultPromptEnhancers || '',
+        branding: newChannel.branding || {},
+        goals: newChannel.goals || {},
+        audience: newChannel.audience || {},
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Failed to create channel:', error);
+      return;
+    }
+
+    // Map returned data back to Channel type
+    const savedChannel: Channel = {
+      id: data.id,
+      name: data.name,
+      niche: data.niche as ChannelNiche,
+      subscribers: data.subscribers || 0,
+      avatar: data.avatar || '',
+      styleMemory: data.style_memory || [],
+      defaultPromptEnhancers: data.default_prompt_enhancers || '',
+      branding: data.branding || {},
+      goals: data.goals || {},
+      audience: data.audience || {},
+    };
+
+    setLocalChannels(prev => [...prev, savedChannel]);
+    setActiveChannelId(savedChannel.id);
   };
 
   const handleNewVideo = () => {
