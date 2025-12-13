@@ -5,6 +5,7 @@ interface AuthContextType {
     user: User | null;
     session: Session | null;
     loading: boolean;
+    error: Error | null; // Added error state
     isEnabled: boolean;
     signIn: (email: string, password: string) => Promise<void>;
     signUp: (email: string, password: string) => Promise<void>;
@@ -17,6 +18,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
     const [loading, setLoading] = useState(hasSupabaseCredentials);
+    const [error, setError] = useState<Error | null>(null);
 
     useEffect(() => {
         // Skip initialization if no credentials
@@ -51,6 +53,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 }
             } catch (e) {
                 console.warn('Auth initialization warning (proceeding to app):', e);
+                setError(e as Error); // Capture error
             } finally {
                 // Always stop loading regardless of success/failure
                 setLoading(false);
@@ -102,6 +105,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         user,
         session,
         loading,
+        error,
         isEnabled: hasSupabaseCredentials,
         signIn: handleSignIn,
         signUp: handleSignUp,
@@ -142,6 +146,7 @@ export function useSupabaseQuery<T>(
         }
 
         setLoading(true);
+        setError(null); // Clear previous errors
         try {
             let query = supabase.from(tableName).select('*');
 
